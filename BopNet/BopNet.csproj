@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="libsodium" Version="1.0.20.1" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-preview.2.25163.2"/>
+        <PackageReference Include="NetCord" Version="1.0.0-alpha.356"/>
+        <PackageReference Include="NetCord.Hosting" Version="1.0.0-alpha.356" />
+        <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-alpha.356"/>
+        <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.356"/>
+
+        <NativeLibrary Include="/opt/homebrew/Cellar/opus/1.5.2/lib/*" Condition="!$(RuntimeIdentifier.StartsWith('win'))"/>
+        <DirectPInvoke Include="libopus" LibraryPath="/opt/homebrew/Cellar/opus/1.5.2/lib/libopus.a"/>
+
+        <None Update="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>
