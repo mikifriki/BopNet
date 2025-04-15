@@ -31,4 +31,9 @@ public class MusicQueueService : IMusicQueueService
         list.RemoveFirst();
         return nextTrack;
     }
+
+    public void ClearMusicQueue(ulong guildId)
+    {
+        _musicQueue.Remove(guildId);
+    }
 }

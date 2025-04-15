@@ -10,7 +10,7 @@ using NetCord.Services.ApplicationCommands;
 namespace BopNet;
 
 public class Interactions(
-    IFFmpegService fFmpegService,
+    IAudioService audioService,
     IVoiceClientService voiceClientService,
     IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
 {
@@ -21,8 +21,6 @@ public class Interactions(
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
         var guild = Context.Guild!;
-        var audioUrl = GetYouTubeAudioStreamUrl(track);
-        musicQueueService.AddMusicQueue(guildId, audioUrl);
 
         if (!Uri.IsWellFormedUriString(track, UriKind.Absolute))
         {
@@ -38,7 +36,8 @@ public class Interactions(
 
         if (voiceClientService.GuildHasVoiceClientService(guildId))
         {
-            await RespondAsync(InteractionCallback.Message("Track added to queue"));
+            musicQueueService.AddMusicQueue(guildId, track);
+            await RespondAsync(InteractionCallback.Message($"Track added to queue {track}"));
             return;
         }
 
@@ -53,6 +52,9 @@ public class Interactions(
         await voiceClient.StartAsync();
         await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
         var outStream = voiceClient.CreateOutputStream();
+        
+        musicQueueService.AddMusicQueue(guildId, track);
+        await RespondAsync(InteractionCallback.Message($"Track added to queue {track}"));
 
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
@@ -102,35 +104,6 @@ public class Interactions(
         await RespondAsync(InteractionCallback.Message("Music Resumed!"));
     }
 
-    private string GetYouTubeAudioStreamUrl(string videoUrl)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "yt-dlp",
-                Arguments = $"-f bestaudio -g \"{videoUrl}\"",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process != null)
-            {
-                var output = process.StandardOutput.ReadToEnd().Trim();
-                process.WaitForExit();
-                return output;
-            }
-        }
-        catch (Exception ex)
-        {
-            throw new ExternalException("Failed to start YT stream: " + ex.Message);
-        }
-
-        return string.Empty;
-    }
-
     /// <summary>
     /// Plays music from the created queue
     /// </summary>
@@ -144,14 +117,17 @@ public class Interactions(
             var track = musicQueueService.GetNextTrack(guildId);
             if (track == null)
             {
+                await RespondAsync(InteractionCallback.Message("No more music tracks available."));
                 Console.WriteLine("No more music tracks available.");
                 break;
             }
 
             try
             {
-                var ffmpeg = fFmpegService.StartFFmpeg(guildId, track);
-                await HandleAudioStreaming(ffmpeg!, buffer, stream);
+                var audioUrl = audioService.GetAudioUrl(track);
+                if (audioUrl == null) return;
+                var audio = audioService.StartAudio(guildId, audioUrl);
+                await HandleAudioStreaming(audio!, buffer, stream);
             }
             catch (Exception ex)
             {
@@ -201,12 +177,13 @@ public class Interactions(
     /// Gets GuildID if possible.
     /// </summary>
     /// <param name="guildId"></param>
-    /// <returns>GuildID for Guild or ++</returns>
+    /// <returns>GuildID for Guild or 000 if none is found</returns>
     private ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 000;
 
     private void DisconnectBot(ulong guildId)
     {
         voiceClientService.StopStream(Context.Client, guildId);
-        fFmpegService.StopFFmpeg(guildId);
+        audioService.StopAudio(guildId);
+        musicQueueService.ClearMusicQueue(guildId);
     }
 }

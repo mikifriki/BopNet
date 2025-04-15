@@ -2,13 +2,13 @@ using System.Diagnostics;
 
 namespace BopNet.Services;
 
-public class FFmpegService : IFFmpegService
+public class AudioService : IAudioService
 {
     private Process? _ffmpegProcesses = new();
 
-    public Process? StartFFmpeg(ulong? guildId, string inputUrl)
+    public Process? StartAudio(ulong? guildId, string inputUrl)
     {
-        StopFFmpeg(guildId);
+        StopAudio(guildId);
         var psi = new ProcessStartInfo
         {
             FileName = "ffmpeg",
@@ -27,7 +27,26 @@ public class FFmpegService : IFFmpegService
         return ffmpegProcess;
     }
 
-    public void StopFFmpeg(ulong? guildId)
+    public string? GetAudioUrl(string videoUrl)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "yt-dlp",
+            Arguments = $"-f bestaudio -g \"{videoUrl}\"",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var process = Process.Start(psi);
+        if (process == null) return null;
+
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        return output;
+    } 
+
+    public void StopAudio(ulong? guildId)
     {
         try
         {
@@ -42,7 +61,7 @@ public class FFmpegService : IFFmpegService
         }
     }
 
-    public bool IsFFmpegRunning(ulong? guildId)
+    public bool IsAudioPlaying(ulong? guildId)
     {
         try
         {
@@ -54,5 +73,5 @@ public class FFmpegService : IFFmpegService
         }
     }
 
-    public Process? GetFFmpegProcess(ulong? guildId) => _ffmpegProcesses;
+    public Process? GetAudioProcess(ulong? guildId) => _ffmpegProcesses;
 }

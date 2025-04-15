@@ -12,7 +12,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services
     .AddDiscordGateway()
     .AddApplicationCommands()
-    .AddSingleton<IFFmpegService, FFmpegService>()
+    .AddSingleton<IAudioService, AudioService>()
     .AddSingleton<IVoiceClientService, VoiceClientService>()
     .AddSingleton<IMusicQueueService, MusicQueueService>();
 
