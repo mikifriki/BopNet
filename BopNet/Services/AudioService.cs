@@ -23,8 +23,6 @@ public class AudioService : IAudioService
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8, // <--- important
-                StandardErrorEncoding = Encoding.UTF8
             }
         };
         var audioProcess = new GuildAudio();
