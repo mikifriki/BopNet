@@ -6,7 +6,7 @@ namespace BopNet.Services;
 public interface IVoiceClientService
 {
     Task<VoiceClient?> StartVoiceClient(GatewayClient client,  ulong guild, VoiceState voiceState);
-    public VoiceClient? GetVoiceClientService();
+    public VoiceClient? GetVoiceClientService(ulong guildId);
     public bool GuildHasVoiceClientService(ulong guildId);
     public void PauseStream(ulong guildId);
     public void ResumeStream(ulong guildId);

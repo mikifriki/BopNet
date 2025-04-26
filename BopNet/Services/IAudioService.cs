@@ -4,9 +4,11 @@ namespace BopNet.Services;
 
 public interface IAudioService
 {
-    Process? StartAudio(ulong? guildId, string inputUrl);
+    public Task StartAudio(ulong guildId, string inputUrl);
     string? GetAudioUrl(string videoUrl);
-    void StopAudio(ulong? guildId);
-    bool IsAudioPlaying(ulong? guildId);
-    Process? GetAudioProcess(ulong? guildId);
+    void PauseAudio(ulong guildId);
+    void StopAudio(ulong guildId);
+    bool IsAudioPlaying(ulong guildId);
+    Process? GetAudioProcess(ulong guildId);
+    public string? GetPlaybackTimestamp(ulong guildId);
 }

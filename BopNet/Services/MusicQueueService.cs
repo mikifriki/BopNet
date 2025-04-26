@@ -4,15 +4,14 @@ public class MusicQueueService : IMusicQueueService
 {
     private readonly Dictionary<ulong, LinkedList<string>> _musicQueue = new();
 
-    public void AddMusicQueue(ulong? guildId, string audioUrl)
+    public void AddMusicQueue(ulong guildId, string audioUrl)
     {
-        if (guildId == null) return;
-        var hasAudioUrl = _musicQueue.TryGetValue(guildId.Value, out var musicQueue);
+        var hasAudioUrl = _musicQueue.TryGetValue(guildId, out var musicQueue);
         if (!hasAudioUrl)
         {
             var musicList = new LinkedList<string>();
             musicList.AddLast(audioUrl);
-            _musicQueue.Add(guildId.Value, musicList);
+            _musicQueue.Add(guildId, musicList);
             return;
         }
 
@@ -20,8 +19,7 @@ public class MusicQueueService : IMusicQueueService
         musicQueue?.AddLast(audioUrl);
     }
 
-    public LinkedList<string>? GetMusicQueue(ulong? guildId) =>
-        guildId == null ? null : _musicQueue.GetValueOrDefault(guildId.Value);
+    public LinkedList<string>? GetMusicQueue(ulong guildId) => _musicQueue.GetValueOrDefault(guildId);
 
     public string? GetNextTrack(ulong guildId)
     {
@@ -32,8 +30,5 @@ public class MusicQueueService : IMusicQueueService
         return nextTrack;
     }
 
-    public void ClearMusicQueue(ulong guildId)
-    {
-        _musicQueue.Remove(guildId);
-    }
+    public void ClearMusicQueue(ulong guildId) => _musicQueue.Remove(guildId);
 }

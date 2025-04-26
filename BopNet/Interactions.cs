@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using BopNet.Services;
 using NetCord;
@@ -14,6 +13,8 @@ public class Interactions(
     IVoiceClientService voiceClientService,
     IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
 {
+    CancellationTokenSource CancelToken = new CancellationTokenSource();
+
     [SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(string track)
     {
@@ -37,7 +38,7 @@ public class Interactions(
         if (voiceClientService.GuildHasVoiceClientService(guildId))
         {
             musicQueueService.AddMusicQueue(guildId, track);
-            await RespondAsync(InteractionCallback.Message($"Track added to queue {track}"));
+            await RespondAsync(InteractionCallback.Message($"Added {track} to queue"));
             return;
         }
 
@@ -52,9 +53,9 @@ public class Interactions(
         await voiceClient.StartAsync();
         await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
         var outStream = voiceClient.CreateOutputStream();
-        
+
         musicQueueService.AddMusicQueue(guildId, track);
-        await RespondAsync(InteractionCallback.Message($"Track added to queue {track}"));
+        await RespondAsync(InteractionCallback.Message($"Added {track} to queue"));
 
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
@@ -89,9 +90,10 @@ public class Interactions(
     {
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
-        voiceClientService.PauseStream(guildId);
-
-        await RespondAsync(InteractionCallback.Message("Music Paused!"));
+        audioService.PauseAudio(guildId);
+        var timestamp = audioService.GetPlaybackTimestamp(guildId);
+        // await CancelToken.CancelAsync();
+        await RespondAsync(InteractionCallback.Message("Music Paused! TimeStamp: "));
     }
 
     [SlashCommand("resume", "resume the music", Contexts = [InteractionContextType.Guild])]
@@ -118,7 +120,6 @@ public class Interactions(
             if (track == null)
             {
                 await RespondAsync(InteractionCallback.Message("No more music tracks available."));
-                Console.WriteLine("No more music tracks available.");
                 break;
             }
 
@@ -126,8 +127,8 @@ public class Interactions(
             {
                 var audioUrl = audioService.GetAudioUrl(track);
                 if (audioUrl == null) return;
-                var audio = audioService.StartAudio(guildId, audioUrl);
-                await HandleAudioStreaming(audio!, buffer, stream);
+                await audioService.StartAudio(guildId, audioUrl);
+                await HandleAudioStreaming(buffer, stream, CancelToken.Token);
             }
             catch (Exception ex)
             {
@@ -142,28 +143,26 @@ public class Interactions(
     /// <param name="ffmpeg"></param>
     /// <param name="buffer"></param>
     /// <param name="stream"></param>
+    /// <param name="cancellationToken"></param>
     /// <exception cref="ExternalException"></exception>
-    private async Task HandleAudioStreaming(Process ffmpeg, byte[] buffer, OpusEncodeStream stream)
+    private async Task HandleAudioStreaming(byte[] buffer, OpusEncodeStream stream, CancellationToken cancellationToken)
     {
         var guildId = GetGuildId(Context.Guild);
-        if (guildId == 0) return;
+        var ffmpeg = audioService.GetAudioProcess(guildId);
+        if (guildId == 0 || ffmpeg == null) return;
+
         try
         {
-            int bytesRead;
-            while ((bytesRead = await ffmpeg.StandardOutput.BaseStream.ReadAsync(buffer.AsMemory(0, buffer.Length))) >
-                   0)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                // Polling should be reworked at some point but this is fine for now
-                if (voiceClientService.IsPaused(guildId))
-                {
-                    await Task.Delay(100);
-                    continue;
-                }
+                var bytesRead =
+                    await ffmpeg.StandardOutput.BaseStream.ReadAsync(buffer.AsMemory(0, buffer.Length),
+                        cancellationToken);
 
                 if (bytesRead == 0)
                     break;
 
-                await stream.WriteAsync(buffer.AsMemory(0, bytesRead));
+                await stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
             }
         }
         catch (InvalidOperationException e)
