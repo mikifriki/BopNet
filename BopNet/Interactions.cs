@@ -59,16 +59,8 @@ public class Interactions(
 
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
-        // 20ms of PCM (48kHz stereo s16le)
-        var buffer = new byte[3840];
-        try
-        {
-            await PlayQueueAsync(guildId, buffer, stream);
-        }
-        catch (Exception)
-        {
-            return;
-        }
+        await audioService.StartAudio(guildId, track);
+        await audioService.StreamToDiscordAsync(stream, CancelToken.Token, guildId);
 
         await stream.FlushAsync();
         // Disconnect the bot once the playback has ended.
@@ -91,8 +83,6 @@ public class Interactions(
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
         audioService.PauseAudio(guildId);
-        var timestamp = audioService.GetPlaybackTimestamp(guildId);
-        // await CancelToken.CancelAsync();
         await RespondAsync(InteractionCallback.Message("Music Paused! TimeStamp: "));
     }
 
@@ -101,75 +91,9 @@ public class Interactions(
     {
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
-        voiceClientService.ResumeStream(guildId);
+        audioService.ResumeAudio(guildId);
 
         await RespondAsync(InteractionCallback.Message("Music Resumed!"));
-    }
-
-    /// <summary>
-    /// Plays music from the created queue
-    /// </summary>
-    /// <param name="guildId"></param>
-    /// <param name="buffer"></param>
-    /// <param name="stream"></param>
-    private async Task PlayQueueAsync(ulong guildId, byte[] buffer, OpusEncodeStream stream)
-    {
-        while (true)
-        {
-            var track = musicQueueService.GetNextTrack(guildId);
-            if (track == null)
-            {
-                await RespondAsync(InteractionCallback.Message("No more music tracks available."));
-                break;
-            }
-
-            try
-            {
-                var audioUrl = audioService.GetAudioUrl(track);
-                if (audioUrl == null) return;
-                await audioService.StartAudio(guildId, audioUrl);
-                await HandleAudioStreaming(buffer, stream, CancelToken.Token);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error while playing track: {ex.Message}");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Streams audio to Discord
-    /// </summary>
-    /// <param name="ffmpeg"></param>
-    /// <param name="buffer"></param>
-    /// <param name="stream"></param>
-    /// <param name="cancellationToken"></param>
-    /// <exception cref="ExternalException"></exception>
-    private async Task HandleAudioStreaming(byte[] buffer, OpusEncodeStream stream, CancellationToken cancellationToken)
-    {
-        var guildId = GetGuildId(Context.Guild);
-        var ffmpeg = audioService.GetAudioProcess(guildId);
-        if (guildId == 0 || ffmpeg == null) return;
-
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var bytesRead =
-                    await ffmpeg.StandardOutput.BaseStream.ReadAsync(buffer.AsMemory(0, buffer.Length),
-                        cancellationToken);
-
-                if (bytesRead == 0)
-                    break;
-
-                await stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
-            }
-        }
-        catch (InvalidOperationException e)
-        {
-            // If caught here then the FFMPEG process was closed during the playback
-            throw new ExternalException("Failed to start audio streaming: " + e.Message);
-        }
     }
 
     /// <summary>

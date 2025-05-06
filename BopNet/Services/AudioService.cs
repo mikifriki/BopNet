@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using BopNet.Models;
 
 namespace BopNet.Services;
@@ -8,16 +7,16 @@ public class AudioService : IAudioService
 {
     private readonly Dictionary<ulong, GuildAudio> _ffmpegProcesses = new();
 
-    public Task StartAudio(ulong guildId, string inputUrl)
+    public async Task StartAudio(ulong guildId, string inputUrl)
     {
-        StopAudio(guildId);
+        string tempFilePath = Path.Combine(Path.GetTempPath(), $"audio_{guildId}.tmp");
+
         var ffmpeg = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments =
-                    $"-i \"{inputUrl}\" -ar 48000 -ac 2 -map 0:a -c:a pcm_s16le -f tee \"[f=s16le]pipe:1|[f=wav]output.wav\" -progress pipe:2 -nostats",
+                Arguments = $"-i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -25,6 +24,19 @@ public class AudioService : IAudioService
                 CreateNoWindow = true,
             }
         };
+
+        var ytDlpProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "yt-dlp",
+                Arguments = $"-o \"{tempFilePath}\" -f bestaudio \"{inputUrl}\"",
+                RedirectStandardOutput = false,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
         var audioProcess = new GuildAudio();
         ffmpeg.ErrorDataReceived += (sender, e) =>
         {
@@ -35,56 +47,104 @@ public class AudioService : IAudioService
         };
 
         ffmpeg.Start();
-        ffmpeg.BeginErrorReadLine();
-        audioProcess.AudioProcess = ffmpeg;
+        await Task.Delay(100);
+        ytDlpProcess.Start();
+        audioProcess.Ffmpeg = ffmpeg;
+        audioProcess.Ytdl = ytDlpProcess;
         _ffmpegProcesses.Add(guildId, audioProcess);
-        return Task.CompletedTask;
+
+        var output = ffmpeg.StandardInput.BaseStream;
+
+        _ = PipeAsync(tempFilePath, output, audioProcess);
     }
 
-    public string? GetPlaybackTimestamp(ulong guildId) =>
-        _ffmpegProcesses.TryGetValue(guildId, out var audio) ? audio.TimeStamp : null;
-
-    // Returns URL for which will be used for streaming
-    public string? GetAudioUrl(string videoUrl)
+    public async Task StreamToDiscordAsync(Stream discordOut, CancellationToken token, ulong guildId)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "yt-dlp",
-            Arguments = $"-f bestaudio -g \"{videoUrl}\"",
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        using var process = Process.Start(psi);
-        if (process == null) return null;
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+        var baseStream = audio.Ffmpeg?.StandardOutput.BaseStream;
+        if (baseStream is null) return;
 
-        var output = process.StandardOutput.ReadToEnd().Trim();
-        process.WaitForExit();
-        return output;
+        var buffer = new byte[audio.BufferSize]; // 20ms of 48kHz stereo 16-bit
+        var silence = new byte[audio.BufferSize];
+
+        while (!token.IsCancellationRequested)
+        {
+            var data = audio.Paused ? silence : buffer;
+            if (!audio.Paused)
+            {
+                var bytesRead = 0;
+                try
+                {
+                    bytesRead = await baseStream.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
+                }
+                catch (IOException)
+                {
+                    break; // FFMPEG stream closed
+                }
+
+                if (bytesRead <= 0) break;
+            }
+
+            await discordOut.WriteAsync(data.AsMemory(0, data.Length), token);
+        }
+    }
+
+    private static async Task PipeAsync(string filePath, Stream output, GuildAudio audio)
+    {
+        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var buffer = new byte[2048];
+
+        while (true)
+        {
+            try
+            {
+                if (audio.Ffmpeg!.HasExited) break;
+            }
+            catch (Exception e)
+            {
+                break;
+            }
+
+            if (fileStream.Position < fileStream.Length)
+            {
+                var bytesRead = await fileStream.ReadAsync(buffer);
+                if (bytesRead <= 0)
+                {
+                    await Task.Delay(100);
+                    continue;
+                }
+
+                await output.WriteAsync(buffer.AsMemory(0, bytesRead));
+                await output.FlushAsync();
+            }
+            else
+            {
+                await Task.Delay(100);
+            }
+        }
+    }
+
+    public void ResumeAudio(ulong guildId)
+    {
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+        audio.ReleaseLock();
     }
 
     public void PauseAudio(ulong guildId)
     {
-        try
-        {
-            if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
-            audio?.AudioProcess?.Kill();
-            audio?.AudioProcess?.Dispose();
-        }
-        catch (InvalidOperationException e)
-        {
-            // FFMPEG is killed by this point
-        }
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+        audio.Paused = true;
     }
 
     public void StopAudio(ulong guildId)
     {
         try
         {
-            if (!_ffmpegProcesses.TryGetValue(guildId, out var ffmpegProcess)) return;
-            ffmpegProcess?.AudioProcess?.Kill();
-            ffmpegProcess?.AudioProcess?.Dispose();
+            if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+            audio?.Ffmpeg?.Kill();
+            audio?.Ffmpeg?.Dispose();
+            audio?.Ytdl?.Kill();
+            audio?.Ytdl?.Dispose();
             _ffmpegProcesses.Remove(guildId);
         }
         catch (InvalidOperationException e)
@@ -98,14 +158,11 @@ public class AudioService : IAudioService
         try
         {
             _ffmpegProcesses.TryGetValue(guildId, out var audio);
-            return audio!.AudioProcess!.HasExited;
+            return audio!.Ffmpeg!.HasExited;
         }
         catch (Exception e)
         {
             return false;
         }
     }
-
-    public Process? GetAudioProcess(ulong guildId) =>
-        _ffmpegProcesses.TryGetValue(guildId, out var audio) ? audio.AudioProcess! : null;
 }
