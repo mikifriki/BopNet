@@ -22,7 +22,7 @@ public class VoiceClientService : IVoiceClientService
             if (_voiceClients.TryGetValue(guild, out var voiceClient)) return voiceClient;
             voiceClient = await client.JoinVoiceChannelAsync(
                 guild,
-                voiceState!.ChannelId.GetValueOrDefault());
+                voiceState.ChannelId.GetValueOrDefault());
 
             return voiceClient;
         }
@@ -34,7 +34,7 @@ public class VoiceClientService : IVoiceClientService
     }
 
     public VoiceClient? GetVoiceClientService(ulong guildId) => _voiceClients.GetValueOrDefault(guildId);
-    public bool GuildHasVoiceClientService(ulong guildId) => _voiceClients.TryGetValue(guildId, out var voiceClient);
+    public bool GuildHasVoiceClientService(ulong guildId) => _voiceClients.TryGetValue(guildId, out _);
     public void PauseStream(ulong guildId) => _paused[guildId] = true;
     public void ResumeStream(ulong guildId) => _paused[guildId] = false;
 
@@ -48,7 +48,7 @@ public class VoiceClientService : IVoiceClientService
             client.CloseAsync();
             client.StartAsync();
         }
-        catch (Exception e)
+        catch (Exception)
         {
             // By this point voiceclient does not exist
         }

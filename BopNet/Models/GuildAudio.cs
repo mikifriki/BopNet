@@ -9,11 +9,5 @@ public class GuildAudio
     public string? TimeStamp {get; set;}
     public bool Paused { get; set; }
 
-    public readonly int BufferSize = 3840;
-
-    public void ReleaseLock()
-    {
-        Paused = false;
-    }
-
+    public const int BufferSize = 3840;
 }

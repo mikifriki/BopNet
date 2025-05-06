@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using BopNet.Services;
 using NetCord;
 using NetCord.Gateway;
@@ -13,7 +12,7 @@ public class Interactions(
     IVoiceClientService voiceClientService,
     IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
 {
-    CancellationTokenSource CancelToken = new CancellationTokenSource();
+    private readonly CancellationTokenSource _cancelToken = new();
 
     [SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(string track)
@@ -60,7 +59,7 @@ public class Interactions(
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
         await audioService.StartAudio(guildId, track);
-        await audioService.StreamToDiscordAsync(stream, CancelToken.Token, guildId);
+        await audioService.StreamToDiscordAsync(stream, _cancelToken.Token, guildId);
 
         await stream.FlushAsync();
         // Disconnect the bot once the playback has ended.

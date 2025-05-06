@@ -9,14 +9,12 @@ public class AudioService : IAudioService
 
     public async Task StartAudio(ulong guildId, string inputUrl)
     {
-        string tempFilePath = Path.Combine(Path.GetTempPath(), $"audio_{guildId}.tmp");
-
         var ffmpeg = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
+                Arguments = $"-re -i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -30,15 +28,15 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "yt-dlp",
-                Arguments = $"-o \"{tempFilePath}\" -f bestaudio \"{inputUrl}\"",
-                RedirectStandardOutput = false,
+                Arguments = $"-o - -f bestaudio \"{inputUrl}\"",
+                RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             }
         };
 
         var audioProcess = new GuildAudio();
-        ffmpeg.ErrorDataReceived += (sender, e) =>
+        ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
                 return;
@@ -53,9 +51,7 @@ public class AudioService : IAudioService
         audioProcess.Ytdl = ytDlpProcess;
         _ffmpegProcesses.Add(guildId, audioProcess);
 
-        var output = ffmpeg.StandardInput.BaseStream;
-
-        _ = PipeAsync(tempFilePath, output, audioProcess);
+        _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, audioProcess);
     }
 
     public async Task StreamToDiscordAsync(Stream discordOut, CancellationToken token, ulong guildId)
@@ -64,15 +60,15 @@ public class AudioService : IAudioService
         var baseStream = audio.Ffmpeg?.StandardOutput.BaseStream;
         if (baseStream is null) return;
 
-        var buffer = new byte[audio.BufferSize]; // 20ms of 48kHz stereo 16-bit
-        var silence = new byte[audio.BufferSize];
+        var buffer = new byte[GuildAudio.BufferSize];
+        var silence = new byte[GuildAudio.BufferSize];
 
         while (!token.IsCancellationRequested)
         {
             var data = audio.Paused ? silence : buffer;
             if (!audio.Paused)
             {
-                var bytesRead = 0;
+                int bytesRead;
                 try
                 {
                     bytesRead = await baseStream.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
@@ -89,10 +85,9 @@ public class AudioService : IAudioService
         }
     }
 
-    private static async Task PipeAsync(string filePath, Stream output, GuildAudio audio)
+    private static async Task PipeAsync(Stream input, Stream output, GuildAudio audio)
     {
-        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var buffer = new byte[2048];
+        var buffer = new byte[GuildAudio.BufferSize];
 
         while (true)
         {
@@ -100,34 +95,25 @@ public class AudioService : IAudioService
             {
                 if (audio.Ffmpeg!.HasExited) break;
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 break;
             }
 
-            if (fileStream.Position < fileStream.Length)
-            {
-                var bytesRead = await fileStream.ReadAsync(buffer);
-                if (bytesRead <= 0)
-                {
-                    await Task.Delay(100);
-                    continue;
-                }
+            var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length));
+            if (read <= 0) break;
 
-                await output.WriteAsync(buffer.AsMemory(0, bytesRead));
-                await output.FlushAsync();
-            }
-            else
-            {
-                await Task.Delay(100);
-            }
+            await output.WriteAsync(buffer.AsMemory(0, read));
+            await output.FlushAsync();
         }
+
+        await output.DisposeAsync();
     }
 
     public void ResumeAudio(ulong guildId)
     {
         if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
-        audio.ReleaseLock();
+        audio.Paused = false;
     }
 
     public void PauseAudio(ulong guildId)
@@ -141,13 +127,13 @@ public class AudioService : IAudioService
         try
         {
             if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
-            audio?.Ffmpeg?.Kill();
-            audio?.Ffmpeg?.Dispose();
-            audio?.Ytdl?.Kill();
-            audio?.Ytdl?.Dispose();
+            audio.Ffmpeg?.Kill();
+            audio.Ffmpeg?.Dispose();
+            audio.Ytdl?.Kill();
+            audio.Ytdl?.Dispose();
             _ffmpegProcesses.Remove(guildId);
         }
-        catch (InvalidOperationException e)
+        catch (InvalidOperationException)
         {
             // FFMPEG is killed by this point
         }
@@ -160,7 +146,7 @@ public class AudioService : IAudioService
             _ffmpegProcesses.TryGetValue(guildId, out var audio);
             return audio!.Ffmpeg!.HasExited;
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return false;
         }
