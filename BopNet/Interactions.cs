@@ -58,11 +58,11 @@ public class Interactions(
 
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
-        await audioService.StartAudio(guildId, track);
-        await audioService.StreamToDiscordAsync(stream, _cancelToken.Token, guildId);
+        await audioService.StartAudio(guildId, track, _cancelToken.Token);
+        await audioService.StreamToDiscordAsync(stream, guildId, _cancelToken.Token);
 
         await stream.FlushAsync();
-        // Disconnect the bot once the playback has ended.
+
         DisconnectBot(guildId);
     }
 
@@ -82,7 +82,7 @@ public class Interactions(
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
         audioService.PauseAudio(guildId);
-        await RespondAsync(InteractionCallback.Message("Music Paused! TimeStamp: "));
+        await RespondAsync(InteractionCallback.Message("Music Paused!"));
     }
 
     [SlashCommand("resume", "resume the music", Contexts = [InteractionContextType.Guild])]
@@ -100,7 +100,7 @@ public class Interactions(
     /// </summary>
     /// <param name="guildId"></param>
     /// <returns>GuildID for Guild or 000 if none is found</returns>
-    private ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 000;
+    private static ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 000;
 
     private void DisconnectBot(ulong guildId)
     {

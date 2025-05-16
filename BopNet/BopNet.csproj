@@ -6,6 +6,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PublishAot>true</PublishAot>
+        <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
 
     <ItemGroup>
@@ -17,7 +18,7 @@
         <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.356"/>
 
         <NativeLibrary Include="/opt/homebrew/Cellar/opus/1.5.2/lib/*" Condition="!$(RuntimeIdentifier.StartsWith('win'))"/>
-        <DirectPInvoke Include="libopus" LibraryPath="/opt/homebrew/Cellar/opus/1.5.2/lib/libopus.a"/>
+        <DirectPInvoke Include="libopus" />
 
         <None Update="appsettings.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

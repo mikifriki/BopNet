@@ -7,7 +7,7 @@ public class AudioService : IAudioService
 {
     private readonly Dictionary<ulong, GuildAudio> _ffmpegProcesses = new();
 
-    public async Task StartAudio(ulong guildId, string inputUrl)
+    public async Task StartAudio(ulong guildId, string inputUrl, CancellationToken token)
     {
         var ffmpeg = new Process
         {
@@ -36,6 +36,8 @@ public class AudioService : IAudioService
         };
 
         var audioProcess = new GuildAudio();
+        
+        // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
@@ -45,16 +47,18 @@ public class AudioService : IAudioService
         };
 
         ffmpeg.Start();
-        await Task.Delay(100);
+        // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
+        await Task.Delay(100, token);
         ytDlpProcess.Start();
+        
         audioProcess.Ffmpeg = ffmpeg;
         audioProcess.Ytdl = ytDlpProcess;
         _ffmpegProcesses.Add(guildId, audioProcess);
 
-        _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, audioProcess);
+        _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, audioProcess, token);
     }
 
-    public async Task StreamToDiscordAsync(Stream discordOut, CancellationToken token, ulong guildId)
+    public async Task StreamToDiscordAsync(Stream discordOut, ulong guildId, CancellationToken token)
     {
         if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
         var baseStream = audio.Ffmpeg?.StandardOutput.BaseStream;
@@ -85,11 +89,11 @@ public class AudioService : IAudioService
         }
     }
 
-    private static async Task PipeAsync(Stream input, Stream output, GuildAudio audio)
+    private async static Task PipeAsync(Stream input, Stream output, GuildAudio audio, CancellationToken token)
     {
         var buffer = new byte[GuildAudio.BufferSize];
 
-        while (true)
+        while (!token.IsCancellationRequested)
         {
             try
             {
@@ -100,11 +104,11 @@ public class AudioService : IAudioService
                 break;
             }
 
-            var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length));
+            var read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
             if (read <= 0) break;
 
-            await output.WriteAsync(buffer.AsMemory(0, read));
-            await output.FlushAsync();
+            await output.WriteAsync(buffer.AsMemory(0, read), token);
+            await output.FlushAsync(token);
         }
 
         await output.DisposeAsync();

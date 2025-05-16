@@ -23,7 +23,7 @@ public class VoiceClientService : IVoiceClientService
             voiceClient = await client.JoinVoiceChannelAsync(
                 guild,
                 voiceState.ChannelId.GetValueOrDefault());
-
+            _voiceClients.Add(guild, voiceClient);
             return voiceClient;
         }
         catch (Exception e)
@@ -42,8 +42,7 @@ public class VoiceClientService : IVoiceClientService
     {
         try
         {
-            if (_voiceClients.TryGetValue(guildId, out var voiceClient)) return;
-            voiceClient!.CloseAsync();
+            if (_voiceClients.TryGetValue(guildId, out var voiceClient)) voiceClient.CloseAsync();
             _voiceClients.Remove(guildId);
             client.CloseAsync();
             client.StartAsync();
