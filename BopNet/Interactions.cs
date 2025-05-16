@@ -58,12 +58,28 @@ public class Interactions(
 
         OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
-        await audioService.StartAudio(guildId, track, _cancelToken.Token);
-        await audioService.StreamToDiscordAsync(stream, guildId, _cancelToken.Token);
+        while (musicQueueService.HasNextTrack(guildId)){
+            var song = musicQueueService.GetNextTrack(guildId);
+            if (song is null) break;
+            
+            await audioService.StartAudio(guildId, song, _cancelToken.Token);
+            await audioService.StreamToDiscordAsync(stream, guildId, _cancelToken.Token);
+            await Task.Delay(500);
+        }
 
         await stream.FlushAsync();
 
         DisconnectBot(guildId);
+    }
+    
+    [SlashCommand("skip", "Skip the song", Contexts = [InteractionContextType.Guild])]
+    public async Task SkipAsync()
+    {
+        var guildId = GetGuildId(Context.Guild);
+        if (guildId == 0) return;
+        audioService.StopAudio(guildId);
+
+        await RespondAsync(InteractionCallback.Message("Song skipped!"));
     }
 
     [SlashCommand("stop", "Stop the music", Contexts = [InteractionContextType.Guild])]

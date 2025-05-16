@@ -16,7 +16,6 @@ public class MusicQueueService : IMusicQueueService
         }
 
         musicQueue?.AddLast(audioUrl);
-        musicQueue?.AddLast(audioUrl);
     }
 
     public LinkedList<string>? GetMusicQueue(ulong guildId) => _musicQueue.GetValueOrDefault(guildId);
@@ -30,5 +29,7 @@ public class MusicQueueService : IMusicQueueService
         return nextTrack;
     }
 
+    public bool HasNextTrack (ulong guildId) => _musicQueue.TryGetValue(guildId, out _);
+    
     public void ClearMusicQueue(ulong guildId) => _musicQueue.Remove(guildId);
 }

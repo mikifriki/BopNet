@@ -9,12 +9,13 @@ public class AudioService : IAudioService
 
     public async Task StartAudio(ulong guildId, string inputUrl, CancellationToken token)
     {
+        StopAudio(guildId);
         var ffmpeg = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-re -i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
+                Arguments = $"-i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
