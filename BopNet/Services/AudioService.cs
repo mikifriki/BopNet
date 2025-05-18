@@ -7,6 +7,12 @@ public class AudioService : IAudioService
 {
     private readonly Dictionary<ulong, GuildAudio> _ffmpegProcesses = new();
 
+    /// <summary>
+    /// Starts streaming given url to ffmpeg buffer
+    /// </summary>
+    /// <param name="guildId">Discord guild ID</param>
+    /// <param name="inputUrl">Music track which should be read</param>
+    /// <param name="token">Cancellation token</param>
     public async Task StartAudio(ulong guildId, string inputUrl, CancellationToken token)
     {
         StopAudio(guildId);
@@ -15,7 +21,7 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i pipe:0 -f s16le -ar 48000 -ac 2 pipe:1",
+                Arguments = $"-i pipe:0 -f s16le -vn -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -29,7 +35,7 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "yt-dlp",
-                Arguments = $"-o - -f bestaudio \"{inputUrl}\"",
+                Arguments = $"-o - -f bestaudio --no-part \"{inputUrl}\"",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -37,7 +43,7 @@ public class AudioService : IAudioService
         };
 
         var audioProcess = new GuildAudio();
-        
+
         // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
@@ -51,7 +57,7 @@ public class AudioService : IAudioService
         // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
         await Task.Delay(100, token);
         ytDlpProcess.Start();
-        
+
         audioProcess.Ffmpeg = ffmpeg;
         audioProcess.Ytdl = ytDlpProcess;
         _ffmpegProcesses.Add(guildId, audioProcess);
@@ -59,6 +65,12 @@ public class AudioService : IAudioService
         _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, audioProcess, token);
     }
 
+    /// <summary>
+    /// Streams the previously started stream into Discord.
+    /// </summary>
+    /// <param name="discordOut">Discord Strream which awaits input</param>
+    /// <param name="guildId">Discord Guild Id</param>
+    /// <param name="token">Cancellation token</param>
     public async Task StreamToDiscordAsync(Stream discordOut, ulong guildId, CancellationToken token)
     {
         if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
@@ -90,7 +102,7 @@ public class AudioService : IAudioService
         }
     }
 
-    private async static Task PipeAsync(Stream input, Stream output, GuildAudio audio, CancellationToken token)
+    private static async Task PipeAsync(Stream input, Stream output, GuildAudio audio, CancellationToken token)
     {
         var buffer = new byte[GuildAudio.BufferSize];
 
@@ -115,18 +127,30 @@ public class AudioService : IAudioService
         await output.DisposeAsync();
     }
 
+    /// <summary>
+    /// Resumes Paused audio.
+    /// </summary>
+    /// <param name="guildId">Discord Guild Id</param>
     public void ResumeAudio(ulong guildId)
     {
         if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
         audio.Paused = false;
     }
 
+    /// <summary>
+    /// Pauses the currently streamed audio.
+    /// </summary>
+    /// <param name="guildId">Discord Guild Id</param>
     public void PauseAudio(ulong guildId)
     {
         if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
         audio.Paused = true;
     }
 
+    /// <summary>
+    /// Stops the audio playback
+    /// </summary>
+    /// <param name="guildId">Discord Guild Id</param>
     public void StopAudio(ulong guildId)
     {
         try
@@ -141,19 +165,6 @@ public class AudioService : IAudioService
         catch (InvalidOperationException)
         {
             // FFMPEG is killed by this point
-        }
-    }
-
-    public bool IsAudioPlaying(ulong guildId)
-    {
-        try
-        {
-            _ffmpegProcesses.TryGetValue(guildId, out var audio);
-            return audio!.Ffmpeg!.HasExited;
-        }
-        catch (Exception)
-        {
-            return false;
         }
     }
 }

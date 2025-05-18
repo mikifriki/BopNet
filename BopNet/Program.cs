@@ -1,5 +1,6 @@
 ﻿using BopNet;
 using BopNet.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -9,12 +10,16 @@ using NetCord.Hosting.Services.ApplicationCommands;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Configuration.AddJsonFile("appsettings.json", optional: true);
+builder.Configuration.SetBasePath(AppContext.BaseDirectory);
+
 builder.Services
     .AddDiscordGateway()
     .AddApplicationCommands()
     .AddSingleton<IAudioService, AudioService>()
     .AddSingleton<IVoiceClientService, VoiceClientService>()
     .AddSingleton<IMusicQueueService, MusicQueueService>();
+
 
 var host = builder.Build();
 
