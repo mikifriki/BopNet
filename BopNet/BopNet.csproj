@@ -5,8 +5,8 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PublishAot>true</PublishAot>
         <IsAotCompatible>true</IsAotCompatible>
+        <StripSymbols>true</StripSymbols>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,9 +16,6 @@
         <PackageReference Include="NetCord.Hosting" Version="1.0.0-alpha.356" />
         <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-alpha.356"/>
         <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.356"/>
-
-        <NativeLibrary Include="/opt/homebrew/Cellar/opus/1.5.2/lib/*" Condition="!$(RuntimeIdentifier.StartsWith('win'))"/>
-        <DirectPInvoke Include="libopus" />
 
         <None Update="appsettings.json">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
