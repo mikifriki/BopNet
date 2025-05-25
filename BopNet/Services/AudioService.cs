@@ -162,8 +162,9 @@ public class AudioService : IAudioService
             audio.Ytdl?.Dispose();
             _ffmpegProcesses.Remove(guildId);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException e)
         {
+            Console.WriteLine("Failed to kill audio processes: " + e.Message);
             // FFMPEG is killed by this point
         }
     }
