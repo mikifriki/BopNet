@@ -171,6 +171,7 @@ public class AudioService : IAudioService
         catch (InvalidOperationException e)
         {
             Console.WriteLine("Audio Process already killed: " + e.Message);
+            // FFMPEG is killed by this point
         }
     }
 }
