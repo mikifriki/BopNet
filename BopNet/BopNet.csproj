@@ -7,6 +7,7 @@
         <Nullable>enable</Nullable>
         <IsAotCompatible>true</IsAotCompatible>
         <StripSymbols>true</StripSymbols>
+        <DebugType>none</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
