@@ -9,5 +9,5 @@ public class GuildAudio
     public string? TimeStamp {get; set;}
     public bool Paused { get; set; }
 
-    public const int BufferSize = 3840;
+    public const int BufferSize = 3840;  // 20ms stereo 16-bit at 48kHz: 48000 * 0.02 * 2 * 2
 }

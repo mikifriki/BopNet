@@ -68,7 +68,7 @@ public class AudioService : IAudioService
     /// <summary>
     /// Streams the previously started stream into Discord.
     /// </summary>
-    /// <param name="discordOut">Discord Strream which awaits input</param>
+    /// <param name="discordOut">Discord Stream which awaits input</param>
     /// <param name="guildId">Discord Guild Id</param>
     /// <param name="token">Cancellation token</param>
     public async Task StreamToDiscordAsync(Stream discordOut, ulong guildId, CancellationToken token)
@@ -102,7 +102,7 @@ public class AudioService : IAudioService
         }
     }
 
-    private static async Task PipeAsync(Stream input, Stream output, GuildAudio audio, CancellationToken token)
+    private async static Task PipeAsync(Stream input, Stream output, GuildAudio audio, CancellationToken token)
     {
         var buffer = new byte[GuildAudio.BufferSize];
 
@@ -133,7 +133,10 @@ public class AudioService : IAudioService
     /// <param name="guildId">Discord Guild Id</param>
     public void ResumeAudio(ulong guildId)
     {
-        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)){
+            Console.WriteLine("Failed to resume audio for Guild: " + guildId);
+            return;
+        }
         audio.Paused = false;
     }
 
@@ -143,7 +146,10 @@ public class AudioService : IAudioService
     /// <param name="guildId">Discord Guild Id</param>
     public void PauseAudio(ulong guildId)
     {
-        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)){
+            Console.WriteLine("Failed to Pause Audio for Guild: " + guildId);
+            return;
+        };
         audio.Paused = true;
     }
 
@@ -162,9 +168,9 @@ public class AudioService : IAudioService
             audio.Ytdl?.Dispose();
             _ffmpegProcesses.Remove(guildId);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException e)
         {
-            // FFMPEG is killed by this point
+            Console.WriteLine("Audio Process already killed: " + e.Message);
         }
     }
 }

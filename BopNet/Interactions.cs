@@ -17,11 +17,15 @@ public class Interactions(
     [SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(string track)
     {
-        var client = Context.Client;
         var guildId = GetGuildId(Context.Guild);
-        if (guildId == 0) return;
-        var guild = Context.Guild!;
+        var guild = Context.Guild;
 
+        if (guild is null || guildId == 0)
+        {
+            await RespondAsync(InteractionCallback.Message("Could not find Guild."));
+            return;
+        }
+        
         if (!Uri.IsWellFormedUriString(track, UriKind.Absolute))
         {
             await RespondAsync(InteractionCallback.Message("Invalid track!"));
@@ -41,22 +45,23 @@ public class Interactions(
             return;
         }
 
-        var voiceClient = await voiceClientService.StartVoiceClient(client, guildId, voiceState);
+        var voiceClient = await voiceClientService.StartVoiceClient(Context.Client, guildId, voiceState);
 
-        if (voiceClient == null)
+        if (voiceClient is null)
         {
-            await RespondAsync(InteractionCallback.Message("Failed to initialize the voice client."));
+            await RespondAsync(InteractionCallback.Message("Failed to start the voice client."));
             return;
         }
 
         await voiceClient.StartAsync();
         await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
-        var outStream = voiceClient.CreateOutputStream();
 
         musicQueueService.AddMusicQueue(guildId, track);
         await RespondAsync(InteractionCallback.Message($"Added {track} to queue"));
 
-        OpusEncodeStream stream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
+        OpusEncodeStream stream = new(
+            voiceClient.CreateOutputStream(), PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio
+        );
 
         while (musicQueueService.HasNextTrack(guildId))
         {
@@ -64,7 +69,7 @@ public class Interactions(
             if (song is null) break;
 
             await audioService.StartAudio(guildId, song, _cancelToken.Token);
-            await Task.Delay(500);
+            await Task.Delay(1000);
             await audioService.StreamToDiscordAsync(stream, guildId, _cancelToken.Token);
         }
 
@@ -116,8 +121,8 @@ public class Interactions(
     /// Gets GuildID if possible.
     /// </summary>
     /// <param name="guildId"></param>
-    /// <returns>GuildID for Guild or 000 if none is found</returns>
-    private static ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 000;
+    /// <returns>GuildID for Guild or 0 if none is found</returns>
+    private static ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 0;
 
     private void DisconnectBot(ulong guildId)
     {
