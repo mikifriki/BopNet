@@ -31,6 +31,8 @@ public class Interactions(
             await RespondAsync(InteractionCallback.Message("Invalid track!"));
             return;
         }
+        
+        track = ClearPlaylistURL(track);
 
         if (!guild.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
         {
@@ -149,5 +151,13 @@ public class Interactions(
                 await context.Client.Rest.DeleteGlobalApplicationCommandAsync(682915212814581791, command.Id);
 
         }
+    }
+    /// <summary>
+    /// Clears Playlist URL from the URL
+    /// </summary>
+    /// <param name="url"></param>
+    /// <returns>Plain youtube URL</returns>
+    private string ClearPlaylistURL(string url) {
+        return url.Split("&list=").First();
     }
 }
