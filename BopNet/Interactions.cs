@@ -7,7 +7,9 @@ using NetCord.Services.ApplicationCommands;
 
 namespace BopNet;
 
+using Microsoft.Extensions.Logging;
 public class Interactions(
+    ILogger<Interactions> logger,
     IAudioService audioService,
     IVoiceClientService voiceClientService,
     IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
@@ -20,6 +22,7 @@ public class Interactions(
         var guildId = GetGuildId(Context.Guild);
         var guild = Context.Guild;
 
+        logger.LogInformation("Started playing track");
         if (guild is null || guildId == 0)
         {
             await RespondAsync(InteractionCallback.Message("Could not find Guild."));
@@ -31,8 +34,6 @@ public class Interactions(
             await RespondAsync(InteractionCallback.Message("Invalid track!"));
             return;
         }
-        
-        track = ClearPlaylistURL(track);
 
         if (!guild.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
         {
@@ -151,13 +152,5 @@ public class Interactions(
                 await context.Client.Rest.DeleteGlobalApplicationCommandAsync(682915212814581791, command.Id);
 
         }
-    }
-    /// <summary>
-    /// Clears Playlist URL from the URL
-    /// </summary>
-    /// <param name="url"></param>
-    /// <returns>Plain youtube URL</returns>
-    private string ClearPlaylistURL(string url) {
-        return url.Split("&list=").First();
     }
 }

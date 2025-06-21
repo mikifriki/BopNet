@@ -9,18 +9,18 @@ public class MusicQueueService : IMusicQueueService
     /// </summary>
     /// <param name="guildId">Discord Guild Id</param>
     /// <param name="audioUrl">Audio URL which will be streamed</param>
-    public void AddMusicQueue(ulong guildId, string audioUrl)
+    public void AddMusicQueue(ulong guildId, string url)
     {
         var hasAudioUrl = _musicQueue.TryGetValue(guildId, out var musicQueue);
         if (!hasAudioUrl)
         {
             var musicList = new LinkedList<string>();
-            musicList.AddLast(audioUrl);
+            musicList.AddLast(url.Split("&list=").First());
             _musicQueue.Add(guildId, musicList);
             return;
         }
 
-        musicQueue?.AddLast(audioUrl);
+        musicQueue?.AddLast(url);
     }
 
     /// <summary>

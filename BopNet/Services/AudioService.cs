@@ -35,7 +35,7 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "yt-dlp",
-                Arguments = $"-o - -f bestaudio --no-part \"{inputUrl}\"",
+                Arguments = $"--no-playlist -o - -f bestaudio --no-part \"{inputUrl}\"",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
