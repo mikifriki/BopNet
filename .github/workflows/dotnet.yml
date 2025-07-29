@@ -32,6 +32,9 @@ jobs:
     - name: Publish (Linux x64)
       run: dotnet publish -c Release -r linux-x64 --self-contained true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishSingleFile=true --framework net8.0 -o ./published/linux
 
+    - name: Copy appsettings.json to publish folder
+      run: cp appsettings.json ./published/linux
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
