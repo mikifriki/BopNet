@@ -30,11 +30,7 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Publish (Linux x64)
-      run: dotnet publish -c Release -r linux-x64 --self-contained true \
-             /p:IncludeNativeLibrariesForSelfExtract=true \
-             /p:PublishSingleFile=true \
-             --framework net8.0 \
-             -o ./published/linux
+      run: dotnet publish -c Release -r linux-x64 --self-contained true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishSingleFile=true --framework net8.0 -o ./published/linux
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
