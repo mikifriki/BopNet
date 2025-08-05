@@ -1,5 +1,7 @@
 ﻿using BopNet;
+using BopNet.Repository;
 using BopNet.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,10 +20,18 @@ builder.Services
     .AddApplicationCommands()
     .AddSingleton<IAudioService, AudioService>()
     .AddSingleton<IVoiceClientService, VoiceClientService>()
-    .AddSingleton<IMusicQueueService, MusicQueueService>();
+    .AddSingleton<IMusicQueueService, MusicQueueService>()
+    .AddDbContext<BotDbContext>(options => options.UseSqlite("Data Source=bot.db"))
+    .AddSingleton<IDatabase, DataBaseService>();
 
 
 var host = builder.Build();
+
+using (var scope = host.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<BotDbContext>();
+    db.Database.EnsureCreated();
+}
 
 // Add commands from modules
 host.AddModules(typeof(Interactions).Assembly);

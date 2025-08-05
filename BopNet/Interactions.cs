@@ -7,14 +7,19 @@ using NetCord.Services.ApplicationCommands;
 
 namespace BopNet;
 
+using Helpers;
 using Microsoft.Extensions.Logging;
+using Models;
+
 public class Interactions(
     ILogger<Interactions> logger,
     IAudioService audioService,
     IVoiceClientService voiceClientService,
-    IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
+    IMusicQueueService musicQueueService,
+    IDatabase database) : ApplicationCommandModule<ApplicationCommandContext>
 {
     private readonly CancellationTokenSource _cancelToken = new();
+    private readonly UrlFilter _urlFilter = new();
 
     [SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(string track)
@@ -70,6 +75,7 @@ public class Interactions(
         {
             var song = musicQueueService.GetNextTrack(guildId);
             if (song is null) break;
+            AddTrackToDb(song);
 
             await audioService.StartAudio(guildId, song, _cancelToken.Token);
             await Task.Delay(1000);
@@ -152,5 +158,15 @@ public class Interactions(
                 await context.Client.Rest.DeleteGlobalApplicationCommandAsync(682915212814581791, command.Id);
 
         }
+    }
+
+    private void AddTrackToDb(string trackUrl) {
+        var videoId  = _urlFilter.GetVideoIdFromUrl(trackUrl);
+        var newTrack = new Track {
+            Reference = videoId
+        };
+        
+        logger.LogInformation("Adding track to db " + videoId);
+        database.SaveTrack(newTrack);
     }
 }
