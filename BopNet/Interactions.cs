@@ -73,9 +73,9 @@ public class Interactions(
 
         while (musicQueueService.HasNextTrack(guildId))
         {
-            var song = musicQueueService.GetNextTrack(guildId);
-            if (song is null) break;
-            AddTrackToDb(song);
+            var nextSong = musicQueueService.GetNextTrack(guildId);
+            if (nextSong is null) break;
+            var song = AddTrackToDb(nextSong);
 
             await audioService.StartAudio(guildId, song, _cancelToken.Token);
             await Task.Delay(1000);
@@ -84,6 +84,7 @@ public class Interactions(
 
         await stream.FlushAsync();
 
+        // This disconnect should be reworked
         DisconnectBot(guildId);
     }
 
@@ -160,13 +161,15 @@ public class Interactions(
         }
     }
 
-    private void AddTrackToDb(string trackUrl) {
+    private Track AddTrackToDb(string trackUrl) {
         var videoId  = _urlFilter.GetVideoIdFromUrl(trackUrl);
         var newTrack = new Track {
-            Reference = videoId
+            Reference = videoId,
+            FullUrl = trackUrl
         };
         
         logger.LogInformation("Adding track to db " + videoId);
         database.SaveTrack(newTrack);
+        return newTrack;
     }
 }

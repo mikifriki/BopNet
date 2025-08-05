@@ -7,7 +7,7 @@ public class DataBaseService(BotDbContext dbContext) : IDatabase {
 
 	public IQueryable<Track> Tracks => dbContext.Tracks.AsQueryable();
 	
-	public void SaveTrack(Track track)
+	public Track SaveTrack(Track track)
 	{
 		var existing = dbContext.Tracks
 			.FirstOrDefault(t => t.Reference == track.Reference);
@@ -21,6 +21,7 @@ public class DataBaseService(BotDbContext dbContext) : IDatabase {
 		}
 
 		dbContext.SaveChanges();
+		return track;
 	}
 	
 	

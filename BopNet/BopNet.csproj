@@ -7,7 +7,7 @@
         <Nullable>enable</Nullable>
         <UseEfCoreSourceGenerators>true</UseEfCoreSourceGenerators>
         <StripSymbols>true</StripSymbols>
-        <DebugType>none</DebugType>
+        <DebugType>portable</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
@@ -25,6 +25,10 @@
         </None>
 
         <PackageReference Include="SQLite" Version="3.13.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="tracks\" />
     </ItemGroup>
 
 </Project>
