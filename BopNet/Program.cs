@@ -22,7 +22,7 @@ builder.Services
     .AddSingleton<IVoiceClientService, VoiceClientService>()
     .AddSingleton<IMusicQueueService, MusicQueueService>()
     .AddDbContext<BotDbContext>(options => options.UseSqlite("Data Source=bot.db"))
-    .AddSingleton<IDatabase, DataBaseService>();
+    .AddScoped<IDatabase, DataBaseService>();
 
 
 var host = builder.Build();
