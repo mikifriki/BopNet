@@ -55,7 +55,7 @@ public class AudioService : IAudioService {
 		audioProcess.Ytdl = ytDlpProcess;
 		_ffmpegProcesses.Add(guildId, audioProcess);
 
-		_ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, $"tracks/{track.Reference}", audioProcess, token);
+		_ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream, $"tracks/{track.Reference}.part", audioProcess, token);
 	}
 
 	/// <summary>
@@ -90,11 +90,12 @@ public class AudioService : IAudioService {
 		}
 	}
 
-	private async static Task PipeAsync(Stream input, Stream output, string path, GuildAudio audio, CancellationToken token) {
+	private static async Task PipeAsync(Stream input, Stream output, string path, GuildAudio audio, CancellationToken token) {
 		const int initialBufferSize = GuildAudio.BufferSize * 4;
 		var readBuffer = new byte[GuildAudio.BufferSize];
 		var bufferStream = new MemoryStream(initialBufferSize);
-
+		
+		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 		await using var fileStream = File.Create(path);
 
 		while (!token.IsCancellationRequested){
