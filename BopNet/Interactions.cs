@@ -7,14 +7,19 @@ using NetCord.Services.ApplicationCommands;
 
 namespace BopNet;
 
+using Helpers;
 using Microsoft.Extensions.Logging;
+using Models;
+
 public class Interactions(
     ILogger<Interactions> logger,
     IAudioService audioService,
     IVoiceClientService voiceClientService,
-    IMusicQueueService musicQueueService) : ApplicationCommandModule<ApplicationCommandContext>
+    IMusicQueueService musicQueueService,
+    IDatabase database) : ApplicationCommandModule<ApplicationCommandContext>
 {
     private readonly CancellationTokenSource _cancelToken = new();
+    private readonly UrlFilter _urlFilter = new();
 
     [SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(string track)
@@ -68,8 +73,9 @@ public class Interactions(
 
         while (musicQueueService.HasNextTrack(guildId))
         {
-            var song = musicQueueService.GetNextTrack(guildId);
-            if (song is null) break;
+            var nextSong = musicQueueService.GetNextTrack(guildId);
+            if (nextSong is null) break;
+            var song = AddTrackToDb(nextSong);
 
             await audioService.StartAudio(guildId, song, _cancelToken.Token);
             await Task.Delay(1000);
@@ -78,6 +84,7 @@ public class Interactions(
 
         await stream.FlushAsync();
 
+        // This disconnect should be reworked
         DisconnectBot(guildId);
     }
 
@@ -133,24 +140,16 @@ public class Interactions(
         audioService.StopAudio(guildId);
         musicQueueService.ClearMusicQueue(guildId);
     }
-    
-    // This is generally not required and is only useful if reusing existing bot to clear commands. As such this is private and not shown and uses hardcoded applicationid
-    private async Task ClearCommandsHandler() {
-        var context = Context;
-        if (context.Guild is not null)
-        {
-            var guildCommands = await context.Client.Rest.GetGuildApplicationCommandsAsync(682915212814581791, context.Guild.Id);
-            foreach (var command in guildCommands)
-                await context.Client.Rest.DeleteGuildApplicationCommandAsync(682915212814581791, context.Guild.Id, command.Id);
 
-            await RespondAsync(InteractionCallback.Message("Could not find Guild."));
-        }
-        else
-        {
-            var globalCommands = await context.Client.Rest.GetGlobalApplicationCommandsAsync(682915212814581791);
-            foreach (var command in globalCommands)
-                await context.Client.Rest.DeleteGlobalApplicationCommandAsync(682915212814581791, command.Id);
-
-        }
+    private Track AddTrackToDb(string trackUrl) {
+        var videoId  = _urlFilter.GetVideoIdFromUrl(trackUrl);
+        var newTrack = new Track {
+            Reference = videoId,
+            FullUrl = trackUrl
+        };
+        
+        logger.LogInformation("Adding track to db " + videoId);
+        database.SaveTrack(newTrack);
+        return newTrack;
     }
 }

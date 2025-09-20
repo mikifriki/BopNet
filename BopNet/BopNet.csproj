@@ -5,13 +5,15 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <IsAotCompatible>true</IsAotCompatible>
+        <UseEfCoreSourceGenerators>true</UseEfCoreSourceGenerators>
         <StripSymbols>true</StripSymbols>
-        <DebugType>none</DebugType>
+        <DebugType>portable</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="libsodium" Version="1.0.20.1" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-preview.2.25163.2"/>
         <PackageReference Include="NetCord" Version="1.0.0-alpha.356"/>
         <PackageReference Include="NetCord.Hosting" Version="1.0.0-alpha.356" />
@@ -21,6 +23,12 @@
         <None Update="appsettings.json">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+
+        <PackageReference Include="SQLite" Version="3.13.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="tracks\" />
     </ItemGroup>
 
 </Project>
