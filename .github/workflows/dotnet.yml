@@ -30,8 +30,8 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Publish (Linux x64)
-      run: dotnet publish -c Release -r linux-x64 --self-contained true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishSingleFile=true --framework net8.0 -o ./published/linux
-
+      run: dotnet publish BopNet/BopNet.csproj -c Release -r linux-x64 --self-contained true --framework net8.0 /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:UseAppHost=true -o ./BopNet/Release
+          
     - name: Copy appsettings.json to publish folder
       run: cp appsettings.json ./published/linux
 
