@@ -140,26 +140,6 @@ public class Interactions(
         audioService.StopAudio(guildId);
         musicQueueService.ClearMusicQueue(guildId);
     }
-    
-    // This is generally not required and is only useful if reusing existing bot to clear commands. As such this is private and not shown and uses hardcoded applicationid
-    private async Task ClearCommandsHandler() {
-        var context = Context;
-        if (context.Guild is not null)
-        {
-            var guildCommands = await context.Client.Rest.GetGuildApplicationCommandsAsync(682915212814581791, context.Guild.Id);
-            foreach (var command in guildCommands)
-                await context.Client.Rest.DeleteGuildApplicationCommandAsync(682915212814581791, context.Guild.Id, command.Id);
-
-            await RespondAsync(InteractionCallback.Message("Could not find Guild."));
-        }
-        else
-        {
-            var globalCommands = await context.Client.Rest.GetGlobalApplicationCommandsAsync(682915212814581791);
-            foreach (var command in globalCommands)
-                await context.Client.Rest.DeleteGlobalApplicationCommandAsync(682915212814581791, command.Id);
-
-        }
-    }
 
     private Track AddTrackToDb(string trackUrl) {
         var videoId  = _urlFilter.GetVideoIdFromUrl(trackUrl);

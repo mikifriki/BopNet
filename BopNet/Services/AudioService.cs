@@ -90,13 +90,13 @@ public class AudioService : IAudioService {
 		}
 	}
 
-	private static async Task PipeAsync(Stream input, Stream output, string path, GuildAudio audio, CancellationToken token) {
+	private async static Task PipeAsync(Stream input, Stream output, string path, GuildAudio audio, CancellationToken token) {
 		const int initialBufferSize = GuildAudio.BufferSize * 4;
 		var readBuffer = new byte[GuildAudio.BufferSize];
 		var bufferStream = new MemoryStream(initialBufferSize);
 		
 		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-		await using var fileStream = File.Create(path);
+		// await using var fileStream = File.Create(path);
 
 		while (!token.IsCancellationRequested){
 			try{
@@ -109,7 +109,7 @@ public class AudioService : IAudioService {
 			var bytesRead = await input.ReadAsync(readBuffer.AsMemory(0, readBuffer.Length), token);
 			if (bytesRead <= 0) break;
 
-			await fileStream.WriteAsync(readBuffer.AsMemory(0, bytesRead), token);
+			// await fileStream.WriteAsync(readBuffer.AsMemory(0, bytesRead), token);
 			await bufferStream.WriteAsync(readBuffer.AsMemory(0, bytesRead), token);
 			if (bufferStream.Length < initialBufferSize)
 				continue;
