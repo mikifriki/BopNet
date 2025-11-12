@@ -83,9 +83,8 @@ public class Interactions(
         }
 
         await stream.FlushAsync();
-
-        // This disconnect should be reworked
-        DisconnectBot(guildId);
+        
+        await DisconnectBot(guildId);
     }
 
     [SlashCommand("skip", "Skip the song", Contexts = [InteractionContextType.Guild])]
@@ -103,7 +102,7 @@ public class Interactions(
     {
         var guildId = GetGuildId(Context.Guild);
         if (guildId == 0) return;
-        DisconnectBot(guildId);
+        await DisconnectBot(guildId);
 
         await RespondAsync(InteractionCallback.Message("Music stopped!"));
     }
@@ -134,9 +133,9 @@ public class Interactions(
     /// <returns>GuildID for Guild or 0 if none is found</returns>
     private static ulong GetGuildId(Guild? guildId) => guildId?.Id ?? 0;
 
-    private void DisconnectBot(ulong guildId)
+    private async Task DisconnectBot(ulong guildId)
     {
-        voiceClientService.StopStream(Context.Client, guildId);
+        await voiceClientService.StopStream(Context.Client, guildId);
         audioService.StopAudio(guildId);
         musicQueueService.ClearMusicQueue(guildId);
     }
