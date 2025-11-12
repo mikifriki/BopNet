@@ -1,12 +1,14 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
 namespace BopNet.Services;
 
-public class VoiceClientService : IVoiceClientService
+public class VoiceClientService(ILogger<Interactions> logger) : IVoiceClientService
 {
-    private readonly Dictionary<ulong, VoiceClient> _voiceClients = new();
-    private readonly Dictionary<ulong, bool> _paused = new();
+    private readonly ConcurrentDictionary<ulong, VoiceClient> _voiceClients = new();
+    private readonly ConcurrentDictionary<ulong, bool> _paused = new();
 
     /// <summary>
     /// Returns a voiceClient for the specific guild.
@@ -23,7 +25,7 @@ public class VoiceClientService : IVoiceClientService
             voiceClient = await client.JoinVoiceChannelAsync(
                 guild,
                 voiceState.ChannelId.GetValueOrDefault());
-            _voiceClients.Add(guild, voiceClient);
+            _voiceClients.TryAdd(guild, voiceClient);
             return voiceClient;
         }
         catch (Exception e)
@@ -33,25 +35,25 @@ public class VoiceClientService : IVoiceClientService
         }
     }
 
+    public async Task StopStream(GatewayClient client, ulong guildId)
+    {
+        try
+        {
+            if (_voiceClients.TryGetValue(guildId, out var voiceClient)) await voiceClient.CloseAsync();
+            _voiceClients.TryRemove(guildId, out _);
+            var voiceState = new VoiceStateProperties(guildId, null);
+            await client.UpdateVoiceStateAsync(voiceState);
+            logger.LogInformation("Voice client stopped");
+        }
+        catch (Exception e)
+        {
+            logger.LogError("Failed to stop voice client: " + e);
+        }
+    }
+
     public VoiceClient? GetVoiceClientService(ulong guildId) => _voiceClients.GetValueOrDefault(guildId);
     public bool GuildHasVoiceClientService(ulong guildId) => _voiceClients.TryGetValue(guildId, out _);
     public void PauseStream(ulong guildId) => _paused[guildId] = true;
     public void ResumeStream(ulong guildId) => _paused[guildId] = false;
-
-    public void StopStream(GatewayClient client, ulong guildId)
-    {
-        try
-        {
-            if (_voiceClients.TryGetValue(guildId, out var voiceClient)) voiceClient.CloseAsync();
-            _voiceClients.Remove(guildId);
-            client.CloseAsync();
-            client.StartAsync();
-        }
-        catch (Exception)
-        {
-            // By this point voiceclient does not exist
-        }
-    }
-
     public bool IsPaused(ulong guildId) => _paused.TryGetValue(guildId, out var paused) && paused;
 }
