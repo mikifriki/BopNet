@@ -55,7 +55,7 @@ jobs:
           path: ./BopNet/Release
 
       - name: Build Docker image
-        run: docker build -t bopnet-image ./BopNet/Release
+        run: docker build -t bopnet-image ./BopNet
 
       - name: Save Docker image as tar
         run: docker save bopnet-image -o bopnet-image.tar
