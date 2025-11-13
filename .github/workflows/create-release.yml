@@ -31,7 +31,7 @@ jobs:
 
       # Docker image build
       - name: Build Docker image
-        run: docker build -t bopnet-image -f Dockerfile ./BopNet
+        run: docker build -t bopnet-image -f Dockerfile ./BopNet/Release
 
       - name: Save Docker image as tar
         run: docker save bopnet-image -o bopnet-image.tar
