@@ -41,3 +41,27 @@ jobs:
         name: BopNet-linux-x64
         path: ./BopNet/Release
           
+  docker:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BopNet-linux-x64
+          path: ./BopNet/Release
+
+      - name: Build Docker image
+        run: docker build -t bopnet-image ./BopNet
+
+      - name: Save Docker image as tar
+        run: docker save bopnet-image -o bopnet-image.tar
+
+      - name: Upload Docker image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: bopnet-image
+          path: bopnet-image.tar
