@@ -47,15 +47,14 @@ jobs:
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Upload Docker tar as release asset
       - name: Upload Docker image tar to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./bopnet-image.tar
           asset_name: bopnet-image.tar
           asset_content_type: application/x-tar
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
