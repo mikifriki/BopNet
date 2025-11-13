@@ -46,6 +46,7 @@ jobs:
           release_name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,3 +58,4 @@ jobs:
           asset_path: ./bopnet-image.tar
           asset_name: bopnet-image.tar
           asset_content_type: application/x-tar
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
