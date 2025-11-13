@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
-namespace BopNet.Services;
+namespace BopNet.Services.VoiceClientService;
 
 public class VoiceClientService(ILogger<Interactions> logger) : IVoiceClientService
 {

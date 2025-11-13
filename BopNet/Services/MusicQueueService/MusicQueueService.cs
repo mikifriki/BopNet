@@ -1,4 +1,4 @@
-namespace BopNet.Services;
+namespace BopNet.Services.MusicQueueService;
 
 public class MusicQueueService : IMusicQueueService
 {
