@@ -1,7 +1,7 @@
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
-namespace BopNet.Services;
+namespace BopNet.Services.VoiceClientService;
 
 public interface IVoiceClientService
 {

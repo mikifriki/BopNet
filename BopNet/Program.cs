@@ -1,6 +1,9 @@
 ﻿using BopNet;
 using BopNet.Repository;
-using BopNet.Services;
+using BopNet.Services.AudioService;
+using BopNet.Services.DataBaseService;
+using BopNet.Services.MusicQueueService;
+using BopNet.Services.VoiceClientService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

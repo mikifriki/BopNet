@@ -1,4 +1,7 @@
-using BopNet.Services;
+using BopNet.Services.AudioService;
+using BopNet.Services.DataBaseService;
+using BopNet.Services.MusicQueueService;
+using BopNet.Services.VoiceClientService;
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
@@ -33,7 +36,7 @@ public class Interactions(
             await RespondAsync(InteractionCallback.Message("Could not find Guild."));
             return;
         }
-        
+
         if (!Uri.IsWellFormedUriString(track, UriKind.Absolute))
         {
             await RespondAsync(InteractionCallback.Message("Invalid track!"));
@@ -75,15 +78,23 @@ public class Interactions(
         {
             var nextSong = musicQueueService.GetNextTrack(guildId);
             if (nextSong is null) break;
-            var song = AddTrackToDb(nextSong);
+            var song = UpdateTrackPlayCount(nextSong) ?? SaveNewTrack(nextSong);
+            if (song is null) break;
 
-            await audioService.StartAudio(guildId, song, _cancelToken.Token);
-            await Task.Delay(1000);
+            if (File.Exists(song.FilePath))
+            {
+                await audioService.StartCachedAudio(guildId, song, _cancelToken.Token);
+            }
+            else
+            {
+                await audioService.StartAudio(guildId, song, _cancelToken.Token);
+            }
+
             await audioService.StreamToDiscordAsync(stream, guildId, _cancelToken.Token);
         }
 
         await stream.FlushAsync();
-        
+
         await DisconnectBot(guildId);
     }
 
@@ -140,15 +151,38 @@ public class Interactions(
         musicQueueService.ClearMusicQueue(guildId);
     }
 
-    private Track AddTrackToDb(string trackUrl) {
-        var videoId  = _urlFilter.GetVideoIdFromUrl(trackUrl);
-        var newTrack = new Track {
-            Reference = videoId,
-            FullUrl = trackUrl
-        };
-        
-        logger.LogInformation("Adding track to db " + videoId);
-        database.SaveTrack(newTrack);
-        return newTrack;
+    private Track? UpdateTrackPlayCount(string trackUrl)
+    {
+        var videoId = _urlFilter.GetVideoIdFromUrl(trackUrl);
+        var existingTrack = database.GetTrack(videoId);
+
+        if (existingTrack is null) return null;
+
+        database.UpdateTrackPlayCount(existingTrack);
+        logger.LogInformation("Updated track " + existingTrack.Reference);
+        return existingTrack;
+    }
+
+    private Track? SaveNewTrack(string trackUrl)
+    {
+        var videoId = _urlFilter.GetVideoIdFromUrl(trackUrl);
+        Track? savedTrack = null;
+        try
+        {
+            var newTrack = new Track
+            {
+                Reference = videoId,
+                FullUrl = trackUrl,
+                FilePath = $"tracks/{videoId}.final"
+            };
+
+            savedTrack = database.SaveTrack(newTrack);
+        }
+        catch (InvalidOperationException e)
+        {
+            logger.LogError(e.Message);
+        }
+
+        return savedTrack;
     }
 }
