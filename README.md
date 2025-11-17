@@ -43,3 +43,26 @@ dotnet publish -c Release \
 # How to use?
 
 Once the bot starts up an invitation link will be shown which will allow the bot to be added to a Discord server.
+
+# Container image
+If using the container image to run it the container requires a applicationsettings.json to be mounted to /app/appsettings.json
+In additional a full build image can be gotten from each release. This image can be imported into docker or podman.
+I have the following script which I use to run the container and mount the correct file
+
+```
+#!/bin/bash
+
+# Exit on error
+set -e
+
+# Path to secrets
+SECRETS_FILE="$(pwd)/appsettings.json"
+
+# Image name
+IMAGE_ID="8882c1ba4657"
+
+docker run -d \
+  --restart unless-stopped \
+  -v "${SECRETS_FILE}:/app/appsettings.json:ro" \
+  "$IMAGE_ID" 
+```
