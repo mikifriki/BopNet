@@ -4,7 +4,7 @@ BopNet music bot is a new and simple Youtube music streaming bot for Discord usi
 
 This Bot differs from my previous Music Bot (BopBot) by using C#, requiring no other major frameworks to run and is kept simple to expand on.
 
-Invite the bot to your server!
+Invite the bot to your server! \
 https://discord.com/oauth2/authorize?client_id=1356201634094649387&permissions=277062110272&integration_type=0&scope=bot
 
 # Requirements
