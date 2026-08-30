@@ -3,6 +3,7 @@ using BopNet.Repository;
 using BopNet.Services.AudioService;
 using BopNet.Services.DataBaseService;
 using BopNet.Services.MusicQueueService;
+using BopNet.Services.TrackCacheService;
 using BopNet.Services.VoiceClientService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,7 @@ builder.Configuration.SetBasePath(AppContext.BaseDirectory);
 builder.Services
     .AddDiscordGateway()
     .AddApplicationCommands()
+    .AddSingleton<ITrackCacheService, TrackCacheService>()
     .AddSingleton<IAudioService, AudioService>()
     .AddSingleton<IVoiceClientService, VoiceClientService>()
     .AddSingleton<IMusicQueueService, MusicQueueService>()
