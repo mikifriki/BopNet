@@ -123,6 +123,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
         while (!token.IsCancellationRequested)
         {
             var data = audio.Paused ? silence : buffer;
+            var bytesToWrite = data.Length;
             if (!audio.Paused)
             {
                 int bytesRead;
@@ -136,9 +137,10 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
                 }
 
                 if (bytesRead <= 0) break;
+                bytesToWrite = bytesRead;
             }
 
-            await discordOut.WriteAsync(data.AsMemory(0, data.Length), token);
+            await discordOut.WriteAsync(data.AsMemory(0, bytesToWrite), token);
         }
     }
 

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
@@ -20,7 +21,7 @@ builder.Configuration.AddJsonFile("appsettings.json", optional: true);
 builder.Configuration.SetBasePath(AppContext.BaseDirectory);
 
 builder.Services
-    .AddDiscordGateway()
+    .AddDiscordGateway(options => options.Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates)
     .AddApplicationCommands()
     .AddSingleton<ITrackCacheService, TrackCacheService>()
     .AddSingleton<IAudioService, AudioService>()
@@ -40,8 +41,5 @@ using (var scope = host.Services.CreateScope())
 
 // Add commands from modules
 host.AddModules(typeof(Interactions).Assembly);
-
-// Add handlers to handle the commands
-host.UseGatewayEventHandlers();
 
 await host.RunAsync();
