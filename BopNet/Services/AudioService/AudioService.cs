@@ -22,7 +22,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i pipe:0 -f s16le -vn -ar 48000 -ac 2 pipe:1",
+                Arguments = "-progress pipe:2 -nostats -i pipe:0 -f s16le -vn -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -45,7 +45,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
 
         var audioProcess = new GuildAudio();
 
-        // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
+        // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
@@ -55,6 +55,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
         };
 
         ffmpeg.Start();
+        ffmpeg.BeginErrorReadLine();
         // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
         await Task.Delay(100, token);
         ytDlpProcess.Start();
@@ -77,7 +78,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i \"{trackCacheService.GetCachedTrackPath(track)}\" -f s16le -ar 48000 -ac 2 pipe:1",
+                Arguments = $"-progress pipe:2 -nostats -i \"{trackCacheService.GetCachedTrackPath(track)}\" -f s16le -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -88,7 +89,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
 
         var audioProcess = new GuildAudio();
 
-        // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
+        // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
@@ -98,6 +99,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
         };
 
         ffmpeg.Start();
+        ffmpeg.BeginErrorReadLine();
         // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
         await Task.Delay(100, token);
 

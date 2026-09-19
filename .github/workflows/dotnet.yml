@@ -3,8 +3,12 @@ name: Build BopNet
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -30,11 +34,23 @@ jobs:
       - name: Publish and validate Linux x64 AOT artifacts and Docker image
         run: bash scripts/publish-linux.sh
 
-      - name: Upload executable artifact
+      - name: Package standalone release
+        run: tar -czf BopNet-linux-x64.tar.gz -C BopNet/Release .
+
+      - name: Validate extracted standalone release
+        run: |
+          mkdir "$RUNNER_TEMP/bopnet-standalone"
+          tar -xzf BopNet-linux-x64.tar.gz -C "$RUNNER_TEMP/bopnet-standalone"
+          docker run --rm --platform linux/amd64 --network none --user app \
+            --mount "type=bind,source=$RUNNER_TEMP/bopnet-standalone,target=/app,readonly" \
+            mcr.microsoft.com/dotnet/runtime-deps:10.0-noble /app/BopNet --self-test
+
+      - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
         with:
           name: BopNet-linux-x64
-          path: ./BopNet/Release
+          path: BopNet-linux-x64.tar.gz
+          if-no-files-found: error
 
       - name: Save Docker image as tar
         run: docker save bopnet-image -o bopnet-image.tar
@@ -44,3 +60,28 @@ jobs:
         with:
           name: bopnet-image
           path: bopnet-image.tar
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BopNet-linux-x64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bopnet-image
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
+            BopNet-linux-x64.tar.gz bopnet-image.tar
