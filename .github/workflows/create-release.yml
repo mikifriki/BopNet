@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,15 +27,14 @@ jobs:
       - name: Test
         run: dotnet test --no-build --no-restore --configuration Release
 
-      - name: Publish (Linux x64)
-        run: dotnet publish BopNet/BopNet.csproj -c Release -r linux-x64 --self-contained true --framework net10.0 /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:UseAppHost=true -o ./BopNet/Release
+      - name: Publish and validate Linux x64 AOT artifacts and Docker image
+        run: bash scripts/publish-linux.sh
 
-      - name: Copy appsettings.json
-        run: cp appsettings.json ./BopNet/Release
-
-      # Docker image build
-      - name: Build Docker image
-        run: docker build -t bopnet-image ./BopNet
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BopNet-linux-x64
+          path: ./BopNet/Release
 
       - name: Save Docker image as tar
         run: docker save bopnet-image -o bopnet-image.tar

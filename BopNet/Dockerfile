@@ -1,32 +1,49 @@
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble
+# syntax=docker/dockerfile:1
+# Always build with --platform linux/amd64 and the repository root as context.
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS native
+ARG TARGETARCH
+RUN test "$TARGETARCH" = amd64 || (echo 'BopNet static publishing supports linux/amd64 only' >&2; exit 1)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential clang cmake ninja-build pkg-config git curl zip unzip tar \
+    python3 perl golang-go nasm autoconf automake libtool \
+    libopus-dev libsodium-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/build-native-linux.sh /build-native-linux.sh
+RUN bash /build-native-linux.sh /native
 
-ARG LIBDAVE_VERSION=1.2.0
-ARG LIBDAVE_SHA256=cd77724d3fa90359f6430c294fcad7b8f7e248ec8e16db9031d7b6f622eb3451
+FROM native AS publish
+WORKDIR /src
+COPY global.json ./
+COPY BopNet/BopNet.csproj BopNet/
+COPY BopNet/Native/ BopNet/Native/
+COPY BopNet/Properties/ BopNet/Properties/
+RUN dotnet restore BopNet/BopNet.csproj -r linux-x64 -p:PublishProfile=LinuxStatic
+COPY BopNet/ BopNet/
+RUN dotnet publish BopNet/BopNet.csproj -c Release --no-restore \
+    -p:PublishProfile=LinuxStatic -p:NativeLibraryDirectory=/native/lib \
+    -o /publish
+COPY scripts/check-static-link.sh /check-static-link.sh
+RUN bash /check-static-link.sh /publish/BopNet \
+    && cp -R /native/licenses /publish/licenses \
+    && cp /native/versions.txt /publish/licenses/native-versions.txt
 
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    wget \
-    unzip \
-    python3 \
-    libopus0 \
-    libstdc++6 \
-    && wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp \
-    && rm -rf /var/lib/apt/lists/* 
-
-# The publish workflows target Linux x64. NetCord voice requires libdave for DAVE encryption.
-RUN wget -O /tmp/libdave.zip "https://github.com/discord/libdave/releases/download/v${LIBDAVE_VERSION}/cpp/libdave-Linux-X64-boringssl.zip" \
-    && echo "${LIBDAVE_SHA256}  /tmp/libdave.zip" | sha256sum -c - \
-    && unzip -j /tmp/libdave.zip lib/libdave.so -d /usr/local/lib \
-    && unzip -j /tmp/libdave.zip 'licenses/*' -d /usr/local/share/licenses/libdave \
-    && ldconfig \
-    && rm /tmp/libdave.zip
-
+# No .NET runtime, media tools, or shared NetCord voice libraries in this stage.
+# Running here also catches a lazy dynamic load that readelf cannot detect.
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble AS validate
 WORKDIR /app
+COPY --from=publish /publish/ ./
+RUN ./BopNet --self-test
 
-# Required symlink for the Bot to find unversioned libopus
-RUN ln -s /usr/lib/x86_64-linux-gnu/libopus.so.0 /usr/lib/x86_64-linux-gnu/libopus.so
+FROM scratch AS artifacts
+COPY --from=validate /app/ /
 
-COPY Release/ .
-
-ENTRYPOINT ["./BopNet"]
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg python3 curl ca-certificates \
+    && curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=validate /app/ ./
+RUN ./BopNet --self-test && ffmpeg -version && yt-dlp --version
+ENTRYPOINT ["/app/BopNet"]

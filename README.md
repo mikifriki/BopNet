@@ -1,25 +1,67 @@
-# BopNet The new generation BopBot
+# BopNet
 
-BopNet music bot is a new and simple Youtube music streaming bot for Discord using NetCord.
+A Discord music bot using NetCord, FFmpeg, and yt-dlp.
 
-This Bot differs from my previous Music Bot (BopBot) by using C#, requiring no other major frameworks to run and is kept simple to expand on.
+## Linux static build
 
-# Requirements
+Linux x64 releases use .NET 10 Native AOT with **libdave, libsodium, and Opus statically linked**, following [NetCord's native dependency guide](https://netcord.dev/guides/installing-native-dependencies.html?tabs=static). No .NET runtime or separate NetCord voice libraries are required by the executable. SQLite ships as `libe_sqlite3.so`; keep it beside the executable. Operating-system libraries, FFmpeg, and yt-dlp remain external dependencies.
 
-## For running the bot
-FFmpeg and yt-dlp must be installed and available from the command line. Framework-dependent builds require the .NET 10 runtime; the self-contained publish commands below bundle it.
+Install Docker with Linux container support, then run from the repository root:
 
-NetCord voice requires **libdave** for Discord's DAVE encryption and **Opus** for audio encoding. The `libsodium` NuGet package supplies the fallback transport encryption library. Install native libraries for the same architecture as the bot; see [NetCord's native dependency guide](https://netcord.dev/guides/installing-native-dependencies.html).
+```sh
+bash scripts/publish-linux.sh
+```
 
-On macOS, install Opus with `brew install opus` and link `libopus.dylib` into the output directory as shown below. On Ubuntu, install `libopus0` and make the unversioned library name available with `sudo ln -sf /usr/lib/x86_64-linux-gnu/libopus.so.0 /usr/lib/x86_64-linux-gnu/libopus.so` for Linux x64. Install libdave using the instructions below. The Docker image installs these native dependencies automatically.
+This builds a `linux/amd64` image, including when run on an Apple Silicon Mac using Docker's AMD64 emulation. Native AOT cannot compile a Linux executable directly on macOS. The Rider configuration **Publish BopNet to folder Linux** runs the same script (requires Rider's Shell Script support).
 
-A Discord Token is also required in the appsettings.json for the bot to function. This can be gotten from the Discord Developer Portal.
+The script creates the `bopnet-image` Docker image and replaces the generated `BopNet/Release` directory with the executable, SQLite library, debug symbols, and native licenses. Keep configuration and runtime data outside that output directory. The build needs network access for NuGet, Ubuntu packages, native sources, and yt-dlp. The first native compilation can take several minutes; Docker caches it for subsequent application builds.
 
-## Building the Bot
+The multi-stage build uses Ubuntu Noble throughout. It compiles libdave **1.2.0** from commit `9686fbaea864aa19f0675e486672b6a77811b6a1`, with pinned submodules and the upstream BoringSSL manifest. Its MLS/BoringSSL static archives are merged into the libdave archive. Opus and libsodium static archives come from Noble development packages. The resolved native versions and licenses are included under `licenses` in the publish output.
 
-The .NET 10 SDK is required to build both projects. `global.json` selects SDK 10.0.100 or a newer stable .NET 10 SDK. NetCord packages are kept on the same version (`1.0.0-beta.21`); [NetCord now requires .NET 10](https://netcord.dev/guides/getting-started/installation.html).
+Both GitHub workflows use this same build. Nothing needs to be copied into the build output manually.
 
-From the repository root, restore, build, and run the tests:
+### Run the container
+
+Create `appsettings.json` with your Discord bot token, or supply it as the `Discord__Token` environment variable. Configuration files are excluded from the Docker build and release artifacts.
+
+```json
+{
+  "Discord": {
+    "Token": "YOUR_BOT_TOKEN"
+  }
+}
+```
+
+Run with a persistent working directory for `bot.db` and `tracks`:
+
+```sh
+docker volume create bopnet-data
+docker run --rm --platform linux/amd64 \
+  --mount type=volume,source=bopnet-data,target=/data \
+  --mount "type=bind,source=$PWD/appsettings.json,target=/app/appsettings.json,readonly" \
+  --workdir /data \
+  bopnet-image
+```
+
+The configuration file is read from the executable directory. The database and track cache stay relative to the working directory. To retain an existing installation, mount the directory containing its `bot.db` and `tracks` as `/data` instead of using a new volume. The SQLite schema is unchanged; no migration is required.
+
+For a standalone Linux x64 deployment, copy the entire `BopNet/Release` directory to an Ubuntu 24.04-compatible host, install FFmpeg and yt-dlp, and provide configuration. The binary still uses standard system libraries (including the C/C++ runtime); it is not a fully static musl executable.
+
+### Validation
+
+The Docker build verifies linked native symbols and rejects shared voice/.NET runtime dependencies. It then runs the actual published executable in a minimal runtime-deps image without FFmpeg or shared NetCord voice libraries. SQLite persistence, command registration, Opus encoding, libsodium encryption, and libdave initialization must pass before artifacts or the runtime image are produced.
+
+You can repeat the offline check without a token or Discord connection:
+
+```sh
+docker run --rm --platform linux/amd64 bopnet-image --self-test
+```
+
+The self-test uses and removes a temporary database; it never opens `bot.db`. For live validation, give the bot **Connect** and **Speak** permissions in a test voice channel, then check `/play`, `/pause`, `/resume`, `/skip`, and `/stop`, including a second playback of a cached track. The bot requests the `Guilds` and `GuildVoiceStates` gateway intents.
+
+## Managed development
+
+`global.json` selects SDK 10.0.100 or a newer stable .NET 10 SDK. NetCord packages stay on `1.0.0-beta.21`. Ordinary managed builds and tests remain available:
 
 ```sh
 dotnet restore BopNet.sln
@@ -27,59 +69,17 @@ dotnet build BopNet.sln -c Release --no-restore
 dotnet test BopNet.sln -c Release --no-build
 ```
 
-The bot can be built by different means. Linux builds go to `BopNet/Release` and macOS builds go to `Release`, relative to the repository root.
-If Jetbrains Rider is used, then Publish tasks can be run and two are provided.
-* Publish BopNet to folder Linux
-* Publish BopNet to folder OSX
+The database layer uses `Microsoft.Data.Sqlite` directly to avoid EF Core's experimental Native AOT path. Tests create temporary databases and include compatibility with the original EF-created schema.
 
-The below command is for building for Linux environment
-```
-dotnet publish BopNet/BopNet.csproj -c Release \
-    -r linux-x64 \
-    --self-contained true \
-    /p:IncludeNativeLibrariesForSelfExtract=true \
-    /p:PublishSingleFile=true \
-    -o ./BopNet/Release \
-    --framework net10.0
-```
-And for building for OSX - ARM the following can be used
-```
-dotnet publish BopNet/BopNet.csproj -c Release \
-  -r osx-arm64 \
-  --self-contained true \
-  /p:PublishSingleFile=true \
-  /p:PublishReadyToRun=true \
-  -o ./Release \
-  --framework net10.0
-```
+For local managed voice playback, install the shared libdave and Opus libraries for your platform according to the NetCord guide. The libsodium NuGet package supplies libsodium for managed builds. macOS static publishing is not configured; use Docker for the Linux release build. The existing macOS managed publish configuration remains available.
 
-## Installing libdave for local runs and published builds
-
-Download the matching archive from [Discord's official libdave releases](https://github.com/discord/libdave/releases/tag/v1.2.0/cpp). Version 1.2.0 is used by the Docker image. Extract `lib/libdave.so` (Linux) or `lib/libdave.dylib` (macOS) next to the executable, and retain the archive's `licenses` directory when distributing the bot.
-
-For a Linux x64 publish:
+On a Linux x64 machine where you have prepared the native archives, the equivalent publish command is:
 
 ```sh
-curl -fL 'https://github.com/discord/libdave/releases/download/v1.2.0/cpp/libdave-Linux-X64-boringssl.zip' -o /tmp/bopnet-libdave.zip
-unzip -jo /tmp/bopnet-libdave.zip lib/libdave.so -d ./BopNet/Release
-unzip -o /tmp/bopnet-libdave.zip 'licenses/*' -d ./BopNet/Release
-cp appsettings.json ./BopNet/Release/
+dotnet publish BopNet/BopNet.csproj -c Release \
+  -p:PublishProfile=LinuxStatic \
+  -p:NativeLibraryDirectory=/absolute/path/to/native/lib \
+  -o BopNet/Release
 ```
 
-For a macOS ARM64 publish:
-
-```sh
-curl -fL 'https://github.com/discord/libdave/releases/download/v1.2.0/cpp/libdave-macOS-ARM64-boringssl.zip' -o /tmp/bopnet-libdave.zip
-unzip -jo /tmp/bopnet-libdave.zip lib/libdave.dylib -d ./Release
-unzip -o /tmp/bopnet-libdave.zip 'licenses/*' -d ./Release
-ln -sf "$(brew --prefix opus)/lib/libopus.dylib" ./Release/libopus.dylib
-cp appsettings.json ./Release/
-```
-
-For `dotnet run` or Rider debugging, place libdave (and the macOS Opus link) in the build output instead, for example `BopNet/bin/Debug/net10.0`. Repeat this after cleaning the output. Self-contained and single-file publishing do not bundle system-installed native voice libraries automatically.
-
-# How to use?
-
-Once the bot starts up an invitation link will be shown which will allow the bot to be added to a Discord server.
-
-The bot requests the `Guilds` and `GuildVoiceStates` gateway intents. It needs **Connect** and **Speak** permissions in the target voice channel. After upgrading, check `/play`, `/pause`, `/resume`, `/skip`, and `/stop` in a Discord test server to verify native dependencies and voice playback.
+Prefer the Docker script: it prepares all archives and licenses, performs native-link checks, and runs the offline self-test automatically.
