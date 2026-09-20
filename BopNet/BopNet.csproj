@@ -2,33 +2,34 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <UseEfCoreSourceGenerators>true</UseEfCoreSourceGenerators>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <StaticLinkNetCord Condition="'$(PublishProfile)' == 'LinuxStatic'">true</StaticLinkNetCord>
         <StripSymbols>true</StripSymbols>
         <DebugType>portable</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="libsodium" Version="1.0.20.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-preview.2.25163.2"/>
-        <PackageReference Include="NetCord" Version="1.0.0-alpha.356"/>
-        <PackageReference Include="NetCord.Hosting" Version="1.0.0-alpha.356" />
-        <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-alpha.356"/>
-        <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.356"/>
+        <PackageReference Include="libsodium" Version="1.0.22" Condition="'$(StaticLinkNetCord)' != 'true'" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+        <PackageReference Include="NetCord" Version="1.0.0-beta.21" />
+        <PackageReference Include="NetCord.Hosting" Version="1.0.0-beta.21" />
+        <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-beta.21" />
+        <PackageReference Include="NetCord.Services" Version="1.0.0-beta.21" />
 
         <None Update="appsettings.json">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
 
-        <PackageReference Include="SQLite" Version="3.13.0" />
     </ItemGroup>
 
     <ItemGroup>
       <Folder Include="tracks\" />
     </ItemGroup>
 
+    <Import Project="Native/StaticLink.targets" />
+    <Import Project="Native/MacOS.targets" />
 </Project>

@@ -1,0 +1,20 @@
+<Project>
+    <PropertyGroup>
+        <UseMacOSNativeLibraries Condition="'$(StaticLinkNetCord)' != 'true' and ('$(RuntimeIdentifier)' == 'osx-arm64' or ('$(RuntimeIdentifier)' == '' and '$(NETCoreSdkRuntimeIdentifier)' == 'osx-arm64'))">true</UseMacOSNativeLibraries>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(UseMacOSNativeLibraries)' == 'true'">
+        <None Remove="Native/osx-arm64/**/*" />
+        <None Include="Native/osx-arm64/*.dylib" Link="%(Filename)%(Extension)"
+              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+              ExcludeFromSingleFile="true" />
+        <None Include="Native/osx-arm64/licenses/**/*;Native/osx-arm64/versions.txt"
+              Link="native-licenses/%(RecursiveDir)%(Filename)%(Extension)"
+              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+              ExcludeFromSingleFile="true" />
+    </ItemGroup>
+    <Target Name="CheckMacOSNativeLibraries" BeforeTargets="PrepareForBuild"
+            Condition="'$(UseMacOSNativeLibraries)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+        <Warning Condition="!Exists('$(MSBuildThisFileDirectory)osx-arm64/libdave.dylib') or !Exists('$(MSBuildThisFileDirectory)osx-arm64/libopus.dylib')"
+                 Text="macOS voice libraries are missing. Run bash scripts/setup-native-macos.sh from the repository root, then rebuild. Playback and --self-test require these libraries." />
+    </Target>
+</Project>

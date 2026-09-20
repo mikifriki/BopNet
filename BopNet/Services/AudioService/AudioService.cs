@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using BopNet.Models;
+using BopNet.Services.TrackCacheService;
 
 namespace BopNet.Services.AudioService;
 
-public class AudioService : IAudioService
+public class AudioService(ITrackCacheService trackCacheService) : IAudioService
 {
     private readonly Dictionary<ulong, GuildAudio> _ffmpegProcesses = new();
 
@@ -21,7 +22,7 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i pipe:0 -f s16le -vn -ar 48000 -ac 2 pipe:1",
+                Arguments = "-progress pipe:2 -nostats -i pipe:0 -f s16le -vn -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -44,7 +45,7 @@ public class AudioService : IAudioService
 
         var audioProcess = new GuildAudio();
 
-        // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
+        // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
@@ -54,6 +55,7 @@ public class AudioService : IAudioService
         };
 
         ffmpeg.Start();
+        ffmpeg.BeginErrorReadLine();
         // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
         await Task.Delay(100, token);
         ytDlpProcess.Start();
@@ -62,8 +64,10 @@ public class AudioService : IAudioService
         audioProcess.Ytdl = ytDlpProcess;
         _ffmpegProcesses.Add(guildId, audioProcess);
 
+        var downloadPath = trackCacheService.GetDownloadCachePath(track);
+        var cachedPath = trackCacheService.GetCachedTrackPath(track);
         _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream,
-            $"tracks/{track.Reference}.part", audioProcess, token);
+            downloadPath, cachedPath, audioProcess, token);
     }
 
     public async Task StartCachedAudio(ulong guildId, Track track, CancellationToken token)
@@ -74,7 +78,7 @@ public class AudioService : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-i \"{track.FilePath}\" -f s16le -ar 48000 -ac 2 pipe:1",
+                Arguments = $"-progress pipe:2 -nostats -i \"{trackCacheService.GetCachedTrackPath(track)}\" -f s16le -ar 48000 -ac 2 pipe:1",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -85,7 +89,7 @@ public class AudioService : IAudioService
 
         var audioProcess = new GuildAudio();
 
-        // Since ffmpeg redirects its timestamp into ErrorData then we can get it for future use.
+        // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null || !e.Data.StartsWith("out_time="))
@@ -95,6 +99,7 @@ public class AudioService : IAudioService
         };
 
         ffmpeg.Start();
+        ffmpeg.BeginErrorReadLine();
         // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
         await Task.Delay(100, token);
 
@@ -120,6 +125,7 @@ public class AudioService : IAudioService
         while (!token.IsCancellationRequested)
         {
             var data = audio.Paused ? silence : buffer;
+            var bytesToWrite = data.Length;
             if (!audio.Paused)
             {
                 int bytesRead;
@@ -133,55 +139,56 @@ public class AudioService : IAudioService
                 }
 
                 if (bytesRead <= 0) break;
+                bytesToWrite = bytesRead;
             }
 
-            await discordOut.WriteAsync(data.AsMemory(0, data.Length), token);
+            await discordOut.WriteAsync(data.AsMemory(0, bytesToWrite), token);
         }
     }
 
-    private static async Task PipeAsync(Stream input, Stream output, string path, GuildAudio audio,
+    private static async Task PipeAsync(Stream input, Stream output, string path, string finalPath, GuildAudio audio,
         CancellationToken token)
     {
-        const int initialBufferSize = GuildAudio.BufferSize * 4;
-        var finalPath = path.Replace(".part", ".final");
-        var readBuffer = new byte[GuildAudio.BufferSize];
-        var bufferStream = new MemoryStream(initialBufferSize);
+        var buffer = new byte[GuildAudio.BufferSize];
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await using var fileStream = File.Create(path);
-
-        while (!token.IsCancellationRequested)
+        await using (var fileStream = File.Create(path))
         {
             try
             {
-                if (audio.Ffmpeg!.HasExited) break;
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        if (audio.Ffmpeg!.HasExited) break;
+                    }
+                    catch (Exception)
+                    {
+                        break;
+                    }
+
+                    var bytesRead = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
+                    if (bytesRead <= 0) break;
+
+                    var bytes = buffer.AsMemory(0, bytesRead);
+                    await fileStream.WriteAsync(bytes, token);
+                    await output.WriteAsync(bytes, token);
+                }
+
+                if (!token.IsCancellationRequested)
+                {
+                    await output.FlushAsync(token);
+                }
             }
-            catch (Exception)
+            finally
             {
-                break;
+                await output.DisposeAsync();
             }
-
-            var bytesRead = await input.ReadAsync(readBuffer.AsMemory(0, readBuffer.Length), token);
-            if (bytesRead <= 0) break;
-
-            await fileStream.WriteAsync(readBuffer.AsMemory(0, bytesRead), token);
-            await bufferStream.WriteAsync(readBuffer.AsMemory(0, bytesRead), token);
-            if (bufferStream.Length < initialBufferSize)
-                continue;
-
-            bufferStream.Position = 0;
-            await bufferStream.CopyToAsync(output, token);
-            await output.FlushAsync(token);
-
-            bufferStream.SetLength(0);
         }
 
         if (File.Exists(path))
         {
             File.Move(path, finalPath, overwrite: true);
         }
-
-        await output.DisposeAsync();
     }
 
     /// <summary>

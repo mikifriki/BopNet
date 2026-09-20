@@ -1,71 +1,147 @@
-# BopNet The new generation BopBot
+# BopNet
 
-BopNet music bot is a new and simple Youtube music streaming bot for Discord using NetCord.
+A Discord music bot using .NET 10, NetCord, FFmpeg, and yt-dlp.
 
-This Bot differs from my previous Music Bot (BopBot) by using C#, requiring no other major frameworks to run and is kept simple to expand on.
+## Build and test
 
-Invite the bot to your server! \
-https://discord.com/oauth2/authorize?client_id=1356201634094649387&permissions=277062110272&integration_type=0&scope=bot
-
-# Requirements
-
-## For running the bot
-FFmpeg, yt-dlp and the dotnet 8 runtime must be installed on the machine where the bot will be running, and they must be available from the command line.
-
-A Discord Token is also required in the appsettings.json for the bot to function. This can be gotten from the Discord Developer Portal.
-
-## Building the Bot
-
-dotnet 8 is required to build the music bot. But newer versions can be used, although it is not fully tested.
-
-The bot can be built by different means. In all build cases the final product will be put in a Release directory in the project directory.
-If Jetbrains Rider is used, then Publish tasks can be run and two are provided.
-* Publish BopNet to folder Linux
-* Publish BopNet to folder OSX
-
-The below command is for building for Linux environment
+```sh
+dotnet restore BopNet.sln
+dotnet build BopNet.sln -c Release --no-restore
+dotnet test BopNet.sln -c Release --no-build --no-restore
 ```
-dotnet publish -c Release \
-    -r linux-x64 \
-    --self-contained true \
-    /p:IncludeNativeLibrariesForSelfExtract=true \
-    /p:PublishSingleFile=true \
-    -o ./Release \
-    --framework net8.0
+
+`global.json` selects a stable .NET 10 SDK. Managed voice playback also needs
+[NetCord's native dependencies](https://netcord.dev/guides/installing-native-dependencies.html).
+NetCord remains on `1.0.0-beta.21`; libsodium is supplied by NuGet for managed builds.
+
+### macOS ARM64 development (Rider or `dotnet run`)
+
+Normal builds run managed .NET and load shared voice libraries. Static linking is
+enabled only for the Linux Native AOT release; it does not apply to Rider's Debug
+run or the existing macOS folder publish configuration.
+
+Install Xcode command line tools (`xcode-select --install`, unless Xcode is already
+installed) and Homebrew, then run from the repository root:
+
+```sh
+brew install cmake ninja nasm opus
+bash scripts/setup-native-macos.sh
+dotnet build BopNet/BopNet.csproj
+env -u DYLD_LIBRARY_PATH dotnet run --project BopNet --no-build -- --self-test
 ```
-And for building for OSX - ARM the following can be used
+
+Setup needs network access and builds the pinned libdave 1.2.0 source with its
+vcpkg/BoringSSL dependencies. It copies ARM64 libdave and Opus into the ignored
+`BopNet/Native/osx-arm64/` directory, including licenses and version information.
+Repeat setup after changing native dependencies. Ordinary builds do not download
+or compile them; they warn if setup is missing.
+
+Rebuild before starting the usual BopNet Rider run configuration. Build and macOS
+publish outputs include the shared libraries beside the executable. Remove any
+`DYLD_LIBRARY_PATH` override from Rider's environment variables, especially values
+containing literal quotes or `$DYLD_LIBRARY_PATH`; no override is needed. The
+existing NuGet package supplies libsodium. Keep `appsettings.json` configured as
+usual, and ensure FFmpeg and yt-dlp are available on the run configuration's PATH.
+
+The self-test uses no Discord token or network connection. After it passes, test
+`/play` in a Discord voice channel to verify end-to-end playback.
+
+### Linux release
+
+Build the Linux x64 releases with Docker, from the repository root:
+
+```sh
+bash scripts/publish-linux.sh
 ```
-dotnet publish -c Release \
-  -r osx-arm64 \
-  --self-contained true \
-  /p:PublishSingleFile=true \
-  /p:PublishReadyToRun=true \
-  -o ./Release \
-  --framework net8.0
+
+Docker must be running and executable on `PATH`. The script builds `bopnet-image`
+and replaces `BopNet/Release` only after both builds and container checks pass.
+Keep configuration and data elsewhere. Apple Silicon uses slower AMD64 emulation;
+Linux x64 CI validates releases.
+
+Releases use Native AOT on Ubuntu 24.04, with libdave 1.2.0 (commit
+`9686fbaea864aa19f0675e486672b6a77811b6a1`), Opus, and libsodium statically linked.
+Keep the bundled SQLite library (`libe_sqlite3.so`) beside the executable. Standard
+OS libraries are required; the .NET runtime and shared voice libraries are not.
+Native licenses and versions are under `licenses/`.
+
+## Run the container
+
+Create a private `appsettings.json` outside the release directory:
+
+```json
+{
+  "Discord": {
+    "Token": "YOUR_BOT_TOKEN"
+  }
+}
 ```
-# How to use?
 
-Once the bot starts up an invitation link will be shown which will allow the bot to be added to a Discord server.
-
-# Container image
-If using the container image to run it the container requires a applicationsettings.json to be mounted to /app/appsettings.json
-In additional a full build image can be gotten from each release. This image can be imported into docker or podman.
-I have the following script which I use to run the container and mount the correct file
-
+```sh
+docker volume create bopnet-data
+docker run -d --name bopnet --restart unless-stopped --init --platform linux/amd64 \
+  --mount type=volume,source=bopnet-data,target=/data \
+  --mount "type=bind,source=$PWD/appsettings.json,target=/app/appsettings.json,readonly" \
+  bopnet-image
+docker logs -f bopnet
 ```
-#!/bin/bash
 
-# Exit on error
-set -e
+The container runs as `app` (UID/GID 1654) from `/data`. New named volumes inherit
+its ownership. For existing volumes or bind mounts, grant that user write access
+to `bot.db` and `tracks/`, and read access to configuration. Mount existing data
+at `/data` to retain it; no schema migration is required.
 
-# Path to secrets
-SECRETS_FILE="$(pwd)/appsettings.json"
+Alternatively, supply `Discord__Token` through a private `--env-file`. Configuration
+files are excluded from artifacts. Configuration lives beside the executable;
+database and cache paths are relative to the working directory.
 
-# Image name
-IMAGE_ID="8882c1ba4657"
+## Run standalone
 
-docker run -d \
-  --restart unless-stopped \
-  -v "${SECRETS_FILE}:/app/appsettings.json:ro" \
-  "$IMAGE_ID" 
+Extract the `BopNet-linux-x64.tar.gz` release on an Ubuntu 24.04-compatible x64 host.
+Keep the extracted files together and put `appsettings.json` beside `BopNet`.
+Install FFmpeg, Python 3.10+, and the versions of yt-dlp and Deno pinned in
+`BopNet/Dockerfile`, making both executables available on `PATH`. The official
+yt-dlp Unix executable includes EJS; Deno runs its YouTube challenge scripts.
+See [yt-dlp's dependency guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+
+Run as an unprivileged user from a persistent data directory:
+
+```sh
+cd /path/to/bopnet-data
+/path/to/bopnet-release/BopNet
 ```
+
+Use a service manager with that user and working directory for unattended operation.
+
+## Validate and release
+
+Every PR, main push, and `v*` tag runs tests, native-link checks, and Linux builds.
+Container checks cover non-root execution, SQLite writes on a disposable volume,
+media tools, and file persistence. CI also tests the extracted standalone archive
+without a .NET runtime or shared voice libraries. Tags publish both release archives.
+
+Repeat the offline checks without a token or network connection:
+
+```sh
+docker run --rm --network none --platform linux/amd64 bopnet-image --self-test
+bash scripts/check-container.sh bopnet-image
+```
+
+The self-test covers SQLite persistence, command registration, Opus, libsodium,
+and libdave. It creates and removes a temporary database, never opening `bot.db`.
+Managed tests cover the original EF-created schema. Review AOT/trimming warnings
+before releasing.
+
+Before deploying, test in a Discord server with **Connect** and **Speak** permissions:
+play a fresh YouTube track through to completion, replay it from cache, check
+pause/resume and skip/stop, then restart and verify persisted tracks still work.
+
+Update yt-dlp and Deno by changing their versions and SHA-256 checksums together
+in the Dockerfile, then rebuild and repeat playback validation. Do not update tools
+inside running containers. Rebuild periodically with refreshed .NET/Ubuntu base
+images and packages for security fixes; OS packages are not snapshot-pinned.
+
+Before upgrading, stop the bot and back up `bot.db` and `tracks/`. Keep the previous
+release. To roll back, stop the new instance and run the previous release against
+the same data directory. Never run both against it at once. Restore the backup if
+the newer version changed the data incompatibly.

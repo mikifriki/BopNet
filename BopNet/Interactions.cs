@@ -1,6 +1,7 @@
 using BopNet.Services.AudioService;
 using BopNet.Services.DataBaseService;
 using BopNet.Services.MusicQueueService;
+using BopNet.Services.TrackCacheService;
 using BopNet.Services.VoiceClientService;
 using NetCord;
 using NetCord.Gateway;
@@ -19,7 +20,8 @@ public class Interactions(
     IAudioService audioService,
     IVoiceClientService voiceClientService,
     IMusicQueueService musicQueueService,
-    IDatabase database) : ApplicationCommandModule<ApplicationCommandContext>
+    IDatabase database,
+    ITrackCacheService trackCacheService) : ApplicationCommandModule<ApplicationCommandContext>
 {
     private readonly CancellationTokenSource _cancelToken = new();
     private readonly UrlFilter _urlFilter = new();
@@ -64,14 +66,23 @@ public class Interactions(
             return;
         }
 
-        await voiceClient.StartAsync();
-        await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
+        try
+        {
+            await voiceClient.StartAsync();
+            await voiceClient.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+        }
+        catch
+        {
+            await voiceClientService.StopStream(Context.Client, guildId);
+            throw;
+        }
 
         musicQueueService.AddMusicQueue(guildId, track);
         await RespondAsync(InteractionCallback.Message($"Added {track} to queue"));
 
-        OpusEncodeStream stream = new(
-            voiceClient.CreateOutputStream(), PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio
+        await using var voiceStream = voiceClient.CreateVoiceStream();
+        await using OpusEncodeStream stream = new(
+            voiceStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio
         );
 
         while (musicQueueService.HasNextTrack(guildId))
@@ -81,7 +92,7 @@ public class Interactions(
             var song = UpdateTrackPlayCount(nextSong) ?? SaveNewTrack(nextSong);
             if (song is null) break;
 
-            if (File.Exists(song.FilePath))
+            if (trackCacheService.IsTrackCached(song))
             {
                 await audioService.StartCachedAudio(guildId, song, _cancelToken.Token);
             }
@@ -173,7 +184,7 @@ public class Interactions(
             {
                 Reference = videoId,
                 FullUrl = trackUrl,
-                FilePath = $"tracks/{videoId}.final"
+                FilePath = trackCacheService.GetCachedTrackPath(videoId)
             };
 
             savedTrack = database.SaveTrack(newTrack);

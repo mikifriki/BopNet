@@ -1,0 +1,16 @@
+# Generated build and test output
+bin/
+obj/
+Release/
+TestResults/
+
+# macOS metadata
+.DS_Store
+
+# Runtime audio caches and download fragments
+tracks/
+--Frag*
+
+# Locally built native libraries
+/BopNet/Native/linux-x64/
+/BopNet/Native/osx-arm64/
