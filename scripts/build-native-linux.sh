@@ -15,7 +15,8 @@ trap 'rm -rf "$work"' EXIT
 dave_commit=9686fbaea864aa19f0675e486672b6a77811b6a1
 git clone --depth 1 --branch v1.2.0/cpp https://github.com/discord/libdave.git "$work/libdave"
 test "$(git -C "$work/libdave" rev-parse HEAD)" = "$dave_commit"
-git -C "$work/libdave" submodule update --init --recursive --depth 1
+# vcpkg needs history to resolve the manifest's older baseline and port versions.
+git -C "$work/libdave" submodule update --init --recursive
 source_dir="$work/libdave/cpp"
 "$source_dir/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 cmake -S "$source_dir" -B "$work/build" -G Ninja \
