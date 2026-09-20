@@ -66,14 +66,22 @@ public class Interactions(
             return;
         }
 
-        await voiceClient.StartAsync();
-        await voiceClient.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+        try
+        {
+            await voiceClient.StartAsync();
+            await voiceClient.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+        }
+        catch
+        {
+            await voiceClientService.StopStream(Context.Client, guildId);
+            throw;
+        }
 
         musicQueueService.AddMusicQueue(guildId, track);
         await RespondAsync(InteractionCallback.Message($"Added {track} to queue"));
 
-        using var voiceStream = voiceClient.CreateVoiceStream();
-        using OpusEncodeStream stream = new(
+        await using var voiceStream = voiceClient.CreateVoiceStream();
+        await using OpusEncodeStream stream = new(
             voiceStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio
         );
 

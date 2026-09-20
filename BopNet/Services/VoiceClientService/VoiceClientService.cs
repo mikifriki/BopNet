@@ -37,17 +37,27 @@ public class VoiceClientService(ILogger<Interactions> logger) : IVoiceClientServ
 
     public async Task StopStream(GatewayClient client, ulong guildId)
     {
+        // Remove first: a failed connection may also throw during CloseAsync.
+        _voiceClients.TryRemove(guildId, out var voiceClient);
+        _paused.TryRemove(guildId, out _);
         try
         {
-            if (_voiceClients.TryGetValue(guildId, out var voiceClient)) await voiceClient.CloseAsync();
-            _voiceClients.TryRemove(guildId, out _);
+            if (voiceClient is not null) await voiceClient.CloseAsync();
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Failed to close voice client for guild {GuildId}", guildId);
+        }
+
+        try
+        {
             var voiceState = new VoiceStateProperties(guildId, null);
             await client.UpdateVoiceStateAsync(voiceState);
             logger.LogInformation("Voice client stopped");
         }
         catch (Exception e)
         {
-            logger.LogError("Failed to stop voice client: " + e);
+            logger.LogError(e, "Failed to leave voice channel for guild {GuildId}", guildId);
         }
     }
 

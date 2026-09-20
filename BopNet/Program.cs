@@ -24,7 +24,7 @@ builder.Configuration
 
 builder.Services
     .AddDiscordGateway(options => options.Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates)
-    .AddApplicationCommands()
+    .AddApplicationCommands(options => options.ResultHandler = new CommandResultHandler())
     .AddSingleton<ITrackCacheService, TrackCacheService>()
     .AddSingleton<IAudioService, AudioService>()
     .AddSingleton<IVoiceClientService, VoiceClientService>()

@@ -14,6 +14,40 @@ dotnet test BopNet.sln -c Release --no-build --no-restore
 [NetCord's native dependencies](https://netcord.dev/guides/installing-native-dependencies.html).
 NetCord remains on `1.0.0-beta.21`; libsodium is supplied by NuGet for managed builds.
 
+### macOS ARM64 development (Rider or `dotnet run`)
+
+Normal builds run managed .NET and load shared voice libraries. Static linking is
+enabled only for the Linux Native AOT release; it does not apply to Rider's Debug
+run or the existing macOS folder publish configuration.
+
+Install Xcode command line tools (`xcode-select --install`, unless Xcode is already
+installed) and Homebrew, then run from the repository root:
+
+```sh
+brew install cmake ninja nasm opus
+bash scripts/setup-native-macos.sh
+dotnet build BopNet/BopNet.csproj
+env -u DYLD_LIBRARY_PATH dotnet run --project BopNet --no-build -- --self-test
+```
+
+Setup needs network access and builds the pinned libdave 1.2.0 source with its
+vcpkg/BoringSSL dependencies. It copies ARM64 libdave and Opus into the ignored
+`BopNet/Native/osx-arm64/` directory, including licenses and version information.
+Repeat setup after changing native dependencies. Ordinary builds do not download
+or compile them; they warn if setup is missing.
+
+Rebuild before starting the usual BopNet Rider run configuration. Build and macOS
+publish outputs include the shared libraries beside the executable. Remove any
+`DYLD_LIBRARY_PATH` override from Rider's environment variables, especially values
+containing literal quotes or `$DYLD_LIBRARY_PATH`; no override is needed. The
+existing NuGet package supplies libsodium. Keep `appsettings.json` configured as
+usual, and ensure FFmpeg and yt-dlp are available on the run configuration's PATH.
+
+The self-test uses no Discord token or network connection. After it passes, test
+`/play` in a Discord voice channel to verify end-to-end playback.
+
+### Linux release
+
 Build the Linux x64 releases with Docker, from the repository root:
 
 ```sh

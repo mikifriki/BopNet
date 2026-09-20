@@ -13,3 +13,4 @@ tracks/
 
 # Locally built native libraries
 /BopNet/Native/linux-x64/
+/BopNet/Native/osx-arm64/

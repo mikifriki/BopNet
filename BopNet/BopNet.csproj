@@ -31,4 +31,5 @@
     </ItemGroup>
 
     <Import Project="Native/StaticLink.targets" />
+    <Import Project="Native/MacOS.targets" />
 </Project>

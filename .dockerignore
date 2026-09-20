@@ -15,5 +15,6 @@
 **/*.user
 **/--Frag1
 **/Native/linux-x64
+**/Native/osx-arm64
 *.tar
 *.tar.gz
