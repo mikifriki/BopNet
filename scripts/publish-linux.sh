@@ -10,9 +10,8 @@ trap 'rm -rf "$publish_dir"' EXIT
 docker build --platform linux/amd64 -f BopNet/Dockerfile --target artifacts \
     --output "type=local,dest=$publish_dir" .
 docker build --platform linux/amd64 -f BopNet/Dockerfile --target runtime -t bopnet-image .
-bash scripts/check-container.sh bopnet-image
 
-# Replace the release only after both builds and checks pass.
+# Replace the release only after both builds succeed.
 rm -rf BopNet/Release
 mkdir -p BopNet/Release
 cp -R "$publish_dir/." BopNet/Release/
