@@ -22,7 +22,6 @@ public class Interactions(
 	IMusicQueueService musicQueueService,
 	IDatabase database,
 	ITrackCacheService trackCacheService) : ApplicationCommandModule<ApplicationCommandContext> {
-	private readonly UrlFilter _urlFilter = new();
 
 	[SlashCommand("play", "Plays music", Contexts = [InteractionContextType.Guild])]
 	public async Task PlayAsync(string track) {
@@ -35,7 +34,7 @@ public class Interactions(
 			return;
 		}
 
-		var videoId = _urlFilter.GetVideoIdFromUrl(track);
+		var videoId = UrlFilter.GetVideoIdFromUrl(track);
 		if (videoId.Length == 0){
 			await RespondAsync(InteractionCallback.Message("Please provide a valid YouTube video URL."));
 			return;
@@ -190,7 +189,7 @@ public class Interactions(
 	}
 
 	private Track? UpdateTrackPlayCount(string trackUrl) {
-		var videoId = _urlFilter.GetVideoIdFromUrl(trackUrl);
+		var videoId = UrlFilter.GetVideoIdFromUrl(trackUrl);
 		var existingTrack = database.GetTrack(videoId);
 
 		if (existingTrack is null) return null;
@@ -201,7 +200,7 @@ public class Interactions(
 	}
 
 	private Track? SaveNewTrack(string trackUrl) {
-		var videoId = _urlFilter.GetVideoIdFromUrl(trackUrl);
+		var videoId = UrlFilter.GetVideoIdFromUrl(trackUrl);
 		Track? savedTrack = null;
 		try{
 			var newTrack = new Track {

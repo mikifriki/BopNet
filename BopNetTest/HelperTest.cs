@@ -12,7 +12,7 @@ public class HelperTest {
 	[TestCase("https://www.youtube.com/live/JRWox-i6aAk")]
 	[TestCase("https://www.youtube.com/embed/JRWox-i6aAk")]
 	public void GetVideoIdFromUrl_ReturnsOnlyTheVideoId(string url) {
-		Assert.That(new UrlFilter().GetVideoIdFromUrl(url), Is.EqualTo("JRWox-i6aAk"));
+		Assert.That(UrlFilter.GetVideoIdFromUrl(url), Is.EqualTo("JRWox-i6aAk"));
 	}
 
 	[TestCase("")]
@@ -30,6 +30,6 @@ public class HelperTest {
 	[TestCase("https://youtu.be/JRWox-i6aAk/extra")]
 	[TestCase("https://youtube.com/playlist?list=playlist")]
 	public void GetVideoIdFromUrl_RejectsUnsupportedOrUnsafeInput(string url) {
-		Assert.That(new UrlFilter().GetVideoIdFromUrl(url), Is.Empty);
+		Assert.That(UrlFilter.GetVideoIdFromUrl(url), Is.Empty);
 	}
 }
