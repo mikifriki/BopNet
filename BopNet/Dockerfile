@@ -1,8 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build from the repository root with --platform linux/amd64.
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS native
-ARG TARGETARCH
-RUN test "$TARGETARCH" = amd64 || (echo 'BopNet static publishing supports linux/amd64 only' >&2; exit 1)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential clang cmake ninja-build pkg-config git curl zip unzip tar \
     python3 perl golang-go nasm autoconf automake libtool \
@@ -27,12 +25,8 @@ RUN mkdir /tools \
 FROM native AS publish
 WORKDIR /src
 COPY global.json ./
-COPY BopNet/BopNet.csproj BopNet/
-COPY BopNet/Native/ BopNet/Native/
-COPY BopNet/Properties/ BopNet/Properties/
-RUN dotnet restore BopNet/BopNet.csproj -r linux-x64 -p:PublishProfile=LinuxStatic
 COPY BopNet/ BopNet/
-RUN dotnet publish BopNet/BopNet.csproj -c Release --no-restore \
+RUN dotnet publish BopNet/BopNet.csproj -c Release \
     -p:PublishProfile=LinuxStatic -p:NativeLibraryDirectory=/native/lib \
     -o /publish
 COPY scripts/check-static-link.sh /check-static-link.sh
@@ -40,7 +34,7 @@ RUN bash /check-static-link.sh /publish/BopNet \
     && cp -R /native/licenses /publish/licenses \
     && cp /native/versions.txt /publish/licenses/native-versions.txt
 
-# Catch lazy native loads without media tools or shared voice libraries installed.
+# Check native loading without shared voice libraries installed.
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble AS validate
 WORKDIR /app
 COPY --from=publish /publish/ ./

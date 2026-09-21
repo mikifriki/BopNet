@@ -12,9 +12,4 @@
               CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
               ExcludeFromSingleFile="true" />
     </ItemGroup>
-    <Target Name="CheckMacOSNativeLibraries" BeforeTargets="PrepareForBuild"
-            Condition="'$(UseMacOSNativeLibraries)' == 'true' and '$(DesignTimeBuild)' != 'true'">
-        <Warning Condition="!Exists('$(MSBuildThisFileDirectory)osx-arm64/libdave.dylib') or !Exists('$(MSBuildThisFileDirectory)osx-arm64/libopus.dylib')"
-                 Text="macOS voice libraries are missing. Run bash scripts/setup-native-macos.sh from the repository root, then rebuild. Playback and --self-test require these libraries." />
-    </Target>
 </Project>

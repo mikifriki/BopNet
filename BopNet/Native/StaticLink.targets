@@ -13,13 +13,4 @@
         <LinkerArg Include="-lpthread" />
         <LinkerArg Include="-ldl" />
     </ItemGroup>
-    <Target Name="ValidateStaticNetCordLibraries" BeforeTargets="PrepareForBuild"
-            Condition="'$(StaticLinkNetCord)' == 'true'">
-        <Error Condition="'$(RuntimeIdentifier)' != 'linux-x64' or '$(PublishAot)' != 'true'"
-               Text="Static NetCord linking requires Native AOT and linux-x64. Use the LinuxStatic publish profile." />
-        <Error Condition="!$([MSBuild]::IsOSPlatform('Linux'))"
-               Text="Linux Native AOT must be built on Linux. Run scripts/publish-linux.sh through Docker." />
-        <Error Condition="!Exists('%(NativeLibrary.Identity)')"
-               Text="Missing native archive: %(NativeLibrary.Identity). Build with BopNet/Dockerfile or set NativeLibraryDirectory." />
-    </Target>
 </Project>

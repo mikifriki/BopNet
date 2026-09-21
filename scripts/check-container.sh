@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 image=${1:-bopnet-image}
 volume=$(docker volume create)
 trap 'docker volume rm "$volume" >/dev/null' EXIT
 run=(docker run --rm --platform linux/amd64 --network none
     --mount "type=volume,source=$volume,target=/data")
 
-# The SQLite self-test must also work on the mounted data directory as app.
+# Check SQLite writes on the data volume as the app user.
 "${run[@]}" --env TMPDIR=/data "$image" --self-test
 "${run[@]}" --entrypoint sh "$image" -ec '
     test "$(id -u)" -ne 0
