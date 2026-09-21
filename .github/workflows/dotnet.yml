@@ -71,11 +71,18 @@ jobs:
         with:
           name: bopnet-image
 
-      - name: Create release
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
-            BopNet-linux-x64.tar.gz bopnet-image.tar
+          if response=$(gh api --include "repos/$GH_REPO/releases/tags/$RELEASE_TAG"); then
+            gh release upload "$RELEASE_TAG" --clobber \
+              BopNet-linux-x64.tar.gz bopnet-image.tar
+          elif [ "$(printf '%s\n' "$response" | awk 'NR == 1 { print $2 }')" = "404" ]; then
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
+              BopNet-linux-x64.tar.gz bopnet-image.tar
+          else
+            exit 1
+          fi
