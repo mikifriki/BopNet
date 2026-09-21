@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using BopNet.Models;
 using BopNet.Services.TrackCacheService;
@@ -6,7 +8,7 @@ namespace BopNet.Services.AudioService;
 
 public class AudioService(ITrackCacheService trackCacheService) : IAudioService
 {
-    private readonly Dictionary<ulong, GuildAudio> _ffmpegProcesses = new();
+    private readonly ConcurrentDictionary<ulong, GuildAudio> _ffmpegProcesses = new();
 
     /// <summary>
     /// Starts streaming given url to ffmpeg buffer
@@ -16,7 +18,9 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
     /// <param name="token">Cancellation token</param>
     public async Task StartAudio(ulong guildId, Track track, CancellationToken token)
     {
-        StopAudio(guildId);
+        token.ThrowIfCancellationRequested();
+        await StopAudio(guildId);
+        token.ThrowIfCancellationRequested();
         var ffmpeg = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -36,14 +40,14 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             StartInfo = new ProcessStartInfo
             {
                 FileName = "yt-dlp",
-                Arguments = $"--no-playlist -o - -f bestaudio --no-part \"{track.FullUrl}\"",
+                ArgumentList = { "--no-playlist", "-o", "-", "-f", "bestaudio", "--no-part", "--", track.FullUrl },
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             }
         };
 
-        var audioProcess = new GuildAudio();
+        var audioProcess = new GuildAudio { Ffmpeg = ffmpeg, Ytdl = ytDlpProcess };
 
         // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
@@ -54,31 +58,36 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             audioProcess.TimeStamp = e.Data["out_time=".Length..].Trim();
         };
 
-        ffmpeg.Start();
-        ffmpeg.BeginErrorReadLine();
-        // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
-        await Task.Delay(100, token);
-        ytDlpProcess.Start();
-
-        audioProcess.Ffmpeg = ffmpeg;
-        audioProcess.Ytdl = ytDlpProcess;
-        _ffmpegProcesses.Add(guildId, audioProcess);
-
-        var downloadPath = trackCacheService.GetDownloadCachePath(track);
-        var cachedPath = trackCacheService.GetCachedTrackPath(track);
-        _ = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream,
-            downloadPath, cachedPath, audioProcess, token);
+        _ffmpegProcesses[guildId] = audioProcess;
+        try
+        {
+            var downloadPath = trackCacheService.GetDownloadCachePath(track);
+            var cachedPath = trackCacheService.GetCachedTrackPath(track);
+            ffmpeg.Start();
+            ffmpeg.BeginErrorReadLine();
+            ytDlpProcess.Start();
+            audioProcess.PipingTask = PipeAsync(ytDlpProcess.StandardOutput.BaseStream, ffmpeg.StandardInput.BaseStream,
+                downloadPath, cachedPath, audioProcess, token);
+        }
+        catch
+        {
+            await StopAudio(guildId);
+            throw;
+        }
     }
 
     public async Task StartCachedAudio(ulong guildId, Track track, CancellationToken token)
     {
-        StopAudio(guildId);
+        token.ThrowIfCancellationRequested();
+        await StopAudio(guildId);
+        token.ThrowIfCancellationRequested();
         var ffmpeg = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $"-progress pipe:2 -nostats -i \"{trackCacheService.GetCachedTrackPath(track)}\" -f s16le -ar 48000 -ac 2 pipe:1",
+                ArgumentList = { "-progress", "pipe:2", "-nostats", "-i", trackCacheService.GetCachedTrackPath(track),
+                    "-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1" },
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -87,7 +96,7 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             }
         };
 
-        var audioProcess = new GuildAudio();
+        var audioProcess = new GuildAudio { Ffmpeg = ffmpeg };
 
         // Progress shares stderr with diagnostics; keep draining both during playback.
         ffmpeg.ErrorDataReceived += (_, e) =>
@@ -98,13 +107,17 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
             audioProcess.TimeStamp = e.Data["out_time=".Length..].Trim();
         };
 
-        ffmpeg.Start();
-        ffmpeg.BeginErrorReadLine();
-        // Add a small delay between ffmpeg and ytdlp to ensure ffmpeg is up and running.
-        await Task.Delay(100, token);
-
-        audioProcess.Ffmpeg = ffmpeg;
-        _ffmpegProcesses.Add(guildId, audioProcess);
+        _ffmpegProcesses[guildId] = audioProcess;
+        try
+        {
+            ffmpeg.Start();
+            ffmpeg.BeginErrorReadLine();
+        }
+        catch
+        {
+            await StopAudio(guildId);
+            throw;
+        }
     }
 
     /// <summary>
@@ -113,81 +126,109 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
     /// <param name="discordOut">Discord Stream which awaits input</param>
     /// <param name="guildId">Discord Guild Id</param>
     /// <param name="token">Cancellation token</param>
-    public async Task StreamToDiscordAsync(Stream discordOut, ulong guildId, CancellationToken token)
+    public Task StreamToDiscordAsync(Stream discordOut, ulong guildId, CancellationToken token)
     {
-        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
-        var baseStream = audio.Ffmpeg?.StandardOutput.BaseStream;
-        if (baseStream is null) return;
+        if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return Task.CompletedTask;
+        return audio.StreamingTask = StreamAsync(discordOut, audio, token);
+    }
 
-        var buffer = new byte[GuildAudio.BufferSize];
-        var silence = new byte[GuildAudio.BufferSize];
-
-        while (!token.IsCancellationRequested)
+    private async static Task StreamAsync(Stream discordOut, GuildAudio audio, CancellationToken token)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token, audio.Cancellation.Token);
+        var streamingToken = cancellation.Token;
+        try
         {
-            var data = audio.Paused ? silence : buffer;
-            var bytesToWrite = data.Length;
-            if (!audio.Paused)
+            var baseStream = audio.Ffmpeg?.StandardOutput.BaseStream;
+            if (baseStream is null) return;
+            var buffer = new byte[GuildAudio.BufferSize];
+            var silence = new byte[GuildAudio.BufferSize];
+
+            while (!streamingToken.IsCancellationRequested)
             {
-                int bytesRead;
-                try
+                var paused = audio.Paused;
+                var data = paused ? silence : buffer;
+                var bytesToWrite = data.Length;
+                if (!paused)
                 {
-                    bytesRead = await baseStream.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
-                }
-                catch (IOException)
-                {
-                    break; // FFMPEG stream closed
+                    var bytesRead = await baseStream.ReadAsync(buffer, streamingToken);
+                    if (bytesRead == 0) break;
+                    bytesToWrite = bytesRead;
                 }
 
-                if (bytesRead <= 0) break;
-                bytesToWrite = bytesRead;
+                await discordOut.WriteAsync(data.AsMemory(0, bytesToWrite), streamingToken);
             }
-
-            await discordOut.WriteAsync(data.AsMemory(0, bytesToWrite), token);
+        }
+        catch (OperationCanceledException) when (streamingToken.IsCancellationRequested)
+        {
+            // Skipping ends this track normally, allowing the playback loop to advance.
+        }
+        catch (IOException) when (streamingToken.IsCancellationRequested)
+        {
+            // Stopping the process may close its pipe before cancellation is observed.
+        }
+        finally
+        {
+            await audio.Cancellation.CancelAsync();
+            await audio.PipingTask;
         }
     }
 
-    private static async Task PipeAsync(Stream input, Stream output, string path, string finalPath, GuildAudio audio,
+    private async static Task PipeAsync(Stream input, Stream output, string path, string finalPath, GuildAudio audio,
         CancellationToken token)
     {
-        var buffer = new byte[GuildAudio.BufferSize];
-
-        await using (var fileStream = File.Create(path))
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token, audio.Cancellation.Token);
+        var pipingToken = cancellation.Token;
+        try
         {
             try
             {
-                while (!token.IsCancellationRequested)
+                await using (var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
-                    try
+                    var buffer = new byte[GuildAudio.BufferSize];
+                    while (true)
                     {
-                        if (audio.Ffmpeg!.HasExited) break;
+                        var bytesRead = await input.ReadAsync(buffer, pipingToken);
+                        if (bytesRead == 0) break;
+                        var bytes = buffer.AsMemory(0, bytesRead);
+                        await fileStream.WriteAsync(bytes, pipingToken);
+                        await output.WriteAsync(bytes, pipingToken);
                     }
-                    catch (Exception)
-                    {
-                        break;
-                    }
-
-                    var bytesRead = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
-                    if (bytesRead <= 0) break;
-
-                    var bytes = buffer.AsMemory(0, bytesRead);
-                    await fileStream.WriteAsync(bytes, token);
-                    await output.WriteAsync(bytes, token);
+                    await output.FlushAsync(pipingToken);
                 }
 
-                if (!token.IsCancellationRequested)
+                pipingToken.ThrowIfCancellationRequested();
+                try
                 {
-                    await output.FlushAsync(token);
+                    // Publish without replacing a cache entry another guild completed.
+                    File.Move(path, finalPath);
                 }
+                catch (IOException) when (File.Exists(finalPath))
+                {
+                    // The other completed download is already available for replay.
+                }
+            }
+            catch (Exception e) when (pipingToken.IsCancellationRequested && e is OperationCanceledException or IOException)
+            {
+                // Skipping can cancel an operation or close a process pipe.
             }
             finally
             {
-                await output.DisposeAsync();
+                // Close stdin even if opening the cache failed and always remove
+                // our partial file. The streaming task observes any failure.
+                try
+                {
+                    await output.DisposeAsync();
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
             }
         }
-
-        if (File.Exists(path))
+        catch
         {
-            File.Move(path, finalPath, overwrite: true);
+            await audio.Cancellation.CancelAsync();
+            throw;
         }
     }
 
@@ -225,21 +266,40 @@ public class AudioService(ITrackCacheService trackCacheService) : IAudioService
     /// Stops the audio playback
     /// </summary>
     /// <param name="guildId">Discord Guild Id</param>
-    public void StopAudio(ulong guildId)
+    public async Task StopAudio(ulong guildId)
     {
+        if (!_ffmpegProcesses.TryRemove(guildId, out var audio)) return;
+        await audio.Cancellation.CancelAsync();
         try
         {
-            if (!_ffmpegProcesses.TryGetValue(guildId, out var audio)) return;
-            audio.Ffmpeg?.Kill();
-            audio.Ffmpeg?.Dispose();
-            audio.Ytdl?.Kill();
-            audio.Ytdl?.Dispose();
-            _ffmpegProcesses.Remove(guildId);
+            foreach (var process in new[] { audio.Ffmpeg, audio.Ytdl })
+            {
+                if (process is null) continue;
+                try
+                {
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync();
+                }
+                catch (Exception e) when (e is InvalidOperationException or Win32Exception)
+                {
+                    Console.WriteLine("Could not stop audio process: " + e.Message);
+                }
+            }
+
+            try
+            {
+                await Task.WhenAll(audio.StreamingTask, audio.PipingTask);
+            }
+            catch (Exception)
+            {
+                // Playback observes streaming failures; cleanup must still finish.
+            }
         }
-        catch (InvalidOperationException e)
+        finally
         {
-            Console.WriteLine("Audio Process already killed: " + e.Message);
-            // FFMPEG is killed by this point
+            audio.Ffmpeg?.Dispose();
+            audio.Ytdl?.Dispose();
+            audio.Cancellation.Dispose();
         }
     }
 }
