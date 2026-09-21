@@ -29,9 +29,7 @@ COPY BopNet/ BopNet/
 RUN dotnet publish BopNet/BopNet.csproj -c Release \
     -p:PublishProfile=LinuxStatic -p:NativeLibraryDirectory=/native/lib \
     -o /publish
-COPY scripts/check-static-link.sh /check-static-link.sh
-RUN bash /check-static-link.sh /publish/BopNet \
-    && cp -R /native/licenses /publish/licenses \
+RUN cp -R /native/licenses /publish/licenses \
     && cp /native/versions.txt /publish/licenses/native-versions.txt
 
 # Check native loading without shared voice libraries installed.

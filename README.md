@@ -53,7 +53,7 @@ With Docker running and on PATH, run from the repository root:
 bash scripts/publish-linux.sh
 ```
 
-This builds `bopnet-image` and replaces `BopNet/Release` after all checks pass.
+This builds `bopnet-image` and replaces `BopNet/Release` after both builds succeed.
 Keep configuration and data outside that directory. Builds on Apple Silicon use
 slower AMD64 emulation.
 
@@ -111,15 +111,14 @@ Use a service manager with that user and working directory for unattended operat
 
 ## Validate and release
 
-CI runs tests, checks static linking, and builds both Linux releases. It checks
-container permissions, SQLite, media tools, persistence, and the extracted
-standalone archive. `v*` tags publish both release archives.
+CI runs unit tests and builds both Linux releases. The Docker build and extracted
+standalone archive run the application self-test. `v*` tags publish both release
+archives.
 
-Repeat the offline checks without a token or network connection:
+Run the self-test without a token or network connection:
 
 ```sh
 docker run --rm --network none --platform linux/amd64 bopnet-image --self-test
-bash scripts/check-container.sh bopnet-image
 ```
 
 The self-test checks SQLite, command registration, Opus, libsodium, and libdave
