@@ -22,22 +22,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore BopNet.sln
-
-      - name: Build
-        run: dotnet build BopNet.sln --no-restore --configuration Release
-
       - name: Test
-        run: dotnet test BopNet.sln --no-build --no-restore --configuration Release
+        run: dotnet test BopNet.sln -c Release
 
-      - name: Publish and validate Linux x64 AOT artifacts and Docker image
+      - name: Publish Linux x64
         run: bash scripts/publish-linux.sh
 
       - name: Package standalone release
         run: tar -czf BopNet-linux-x64.tar.gz -C BopNet/Release .
 
-      - name: Validate extracted standalone release
+      - name: Check standalone release
         run: |
           mkdir "$RUNNER_TEMP/bopnet-standalone"
           tar -xzf BopNet-linux-x64.tar.gz -C "$RUNNER_TEMP/bopnet-standalone"
@@ -45,17 +39,17 @@ jobs:
             --mount "type=bind,source=$RUNNER_TEMP/bopnet-standalone,target=/app,readonly" \
             mcr.microsoft.com/dotnet/runtime-deps:10.0-noble /app/BopNet --self-test
 
-      - name: Upload standalone artifact
+      - name: Upload standalone release
         uses: actions/upload-artifact@v4
         with:
           name: BopNet-linux-x64
           path: BopNet-linux-x64.tar.gz
           if-no-files-found: error
 
-      - name: Save Docker image as tar
+      - name: Save Docker image
         run: docker save bopnet-image -o bopnet-image.tar
 
-      - name: Upload Docker image tar
+      - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
           name: bopnet-image

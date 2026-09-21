@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
-    echo 'Native libraries must be built on Linux x64; use the Docker build.' >&2
-    exit 1
-fi
 output=${1:?Usage: build-native-linux.sh OUTPUT_DIRECTORY}
 mkdir -p "$output/lib" "$output/licenses"
 output=$(realpath "$output")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# libdave 1.2.0, including the exact vcpkg submodule and manifest baselines.
+# libdave 1.2.0.
 dave_commit=9686fbaea864aa19f0675e486672b6a77811b6a1
 git clone --depth 1 --branch v1.2.0/cpp https://github.com/discord/libdave.git "$work/libdave"
 test "$(git -C "$work/libdave" rev-parse HEAD)" = "$dave_commit"
-# vcpkg needs history to resolve the manifest's older baseline and port versions.
+# vcpkg needs history to resolve older port versions.
 git -C "$work/libdave" submodule update --init --recursive
 source_dir="$work/libdave/cpp"
 "$source_dir/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
@@ -31,9 +27,7 @@ cmake -S "$source_dir" -B "$work/build" -G Ninja \
 cmake --build "$work/build" --target libdave --parallel 2
 cmake --install "$work/build"
 
-# A static libdave archive alone does not include MLS/BoringSSL. Merge its
-# dependency archives, retaining their symbol index so the linker extracts only
-# referenced objects, including dependencies referenced by other archive members.
+# Merge MLS/BoringSSL into libdave and index the combined archive for the linker.
 {
     printf 'CREATE %s/lib/libdave.a\n' "$output"
     printf 'ADDLIB %s/lib/libdave.a\n' "$work/install"
