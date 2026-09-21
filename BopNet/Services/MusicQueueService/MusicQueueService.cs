@@ -1,43 +1,29 @@
+using System.Collections.Concurrent;
+
 namespace BopNet.Services.MusicQueueService;
 
-public class MusicQueueService : IMusicQueueService
-{
-    private readonly Dictionary<ulong, LinkedList<string>> _musicQueue = new();
+public class MusicQueueService : IMusicQueueService {
+	private readonly ConcurrentDictionary<ulong, ConcurrentQueue<string>> _musicQueue = new();
 
-    /// <summary>
-    /// Adds given url to playback queue
-    /// </summary>
-    /// <param name="guildId">Discord Guild Id</param>
-    /// <param name="audioUrl">Audio URL which will be streamed</param>
-    public void AddMusicQueue(ulong guildId, string url)
-    {
-        var hasAudioUrl = _musicQueue.TryGetValue(guildId, out var musicQueue);
-        if (!hasAudioUrl)
-        {
-            var musicList = new LinkedList<string>();
-            musicList.AddLast(url.Split("&list=").First());
-            _musicQueue.Add(guildId, musicList);
-            return;
-        }
+	/// <summary>
+	/// Adds given url to playback queue
+	/// </summary>
+	/// <param name="guildId">Discord Guild Id</param>
+	/// <param name="url">Audio URL which will be streamed</param>
+	public void AddMusicQueue(ulong guildId, string url) {
+		_musicQueue.GetOrAdd(guildId, _ => new ConcurrentQueue<string>()).Enqueue(url);
+	}
 
-        musicQueue?.AddLast(url);
-    }
+	/// <summary>
+	/// Gets next Track and removes the first song from the queue
+	/// </summary>
+	/// <param name="guildId"></param>
+	/// <returns></returns>
+	public string? GetNextTrack(ulong guildId) {
+		return _musicQueue.TryGetValue(guildId, out var queue) && queue.TryDequeue(out var track) ? track : null;
+	}
 
-    /// <summary>
-    /// Gets next Track and removes the first song from the queue
-    /// </summary>
-    /// <param name="guildId"></param>
-    /// <returns></returns>
-    public string? GetNextTrack(ulong guildId)
-    {
-        if (!_musicQueue.TryGetValue(guildId, out var list) || list.Count == 0) return null;
+	public bool HasNextTrack(ulong guildId) => _musicQueue.TryGetValue(guildId, out var queue) && !queue.IsEmpty;
 
-        var nextTrack = list.First!.Value;
-        list.RemoveFirst();
-        return nextTrack;
-    }
-
-    public bool HasNextTrack(ulong guildId) => _musicQueue.TryGetValue(guildId, out _);
-
-    public void ClearMusicQueue(ulong guildId) => _musicQueue.Remove(guildId);
+	public void ClearMusicQueue(ulong guildId) => _musicQueue.TryRemove(guildId, out _);
 }
